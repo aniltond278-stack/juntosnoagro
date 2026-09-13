@@ -1,7 +1,7 @@
 /**
  * JUNTOS NO AGRO - MAPA INTERATIVO E HERO OVERLAY COM GEOLOCALIZAÇÃO REAL (GPS)
- * Leaflet com tiles OpenStreetMap, marcadores broto/folha com efeito de pulso,
- * card flutuante e rastreamento GPS real do visitante conectado à Sede.
+ * Leaflet com tiles OpenStreetMap, marcadores reais calculados dinamicamente do banco de dados,
+ * overlay dinâmico (sem dados fictícios) e rastreamento GPS real do visitante.
  */
 
 import { StorageService } from '../storage.js';
@@ -23,7 +23,7 @@ export const MapComponent = {
       return;
     }
 
-    // Garante que a renderização do card flutuante sempre ocorra, mesmo se o Leaflet falhar
+    // Garante a renderização do card flutuante sempre
     try {
       this.renderFloatingOverlay();
     } catch (overlayErr) {
@@ -40,10 +40,9 @@ export const MapComponent = {
     try {
       // Garante dimensões computadas no contêiner antes de montar o Leaflet
       container.style.height = '100%';
-      container.style.minHeight = '400px';
+      container.style.minHeight = '350px';
 
       const settings = StorageService.getSettings();
-      const sede = settings.sede || { name: 'Sede — Instrutor Principal', coords: [-14.235, -51.9253] };
       const points = settings.mapPoints || [];
 
       if (leafletMap) {
@@ -55,9 +54,9 @@ export const MapComponent = {
         leafletMap = null;
       }
 
-      // Inicializa o mapa centralizado no Brasil
+      // Inicializa o mapa com coordenadas padrão centralizadas no Brasil (zoom 4)
       leafletMap = window.L.map(containerId, {
-        center: sede.coords,
+        center: [-14.2350, -51.9253],
         zoom: 4,
         zoomControl: false,
         scrollWheelZoom: false,
@@ -73,9 +72,10 @@ export const MapComponent = {
       markersLayer = window.L.layerGroup().addTo(leafletMap);
       linesLayer = window.L.layerGroup().addTo(leafletMap);
 
-      this.renderMarkersAndLines(sede, points);
+      // Renderiza apenas marcadores reais cadastrados
+      this.renderMarkersAndLines(points);
 
-      // Solicita geolocalização nativa do usuário (GPS) de forma assíncrona e segura
+      // Solicita geolocalização nativa real do visitante
       this.requestUserGeolocation();
 
       // Ajusta redimensionamento defensivo após montagem no DOM
@@ -91,7 +91,7 @@ export const MapComponent = {
         }
       });
     } catch (err) {
-      console.error('[MapComponent] Erro capturado e isolado ao montar o Leaflet Map:', err);
+      console.error('[MapComponent] Erro capturado ao montar o Leaflet Map:', err);
       this.renderFallbackMap(container);
     }
   },
@@ -99,7 +99,7 @@ export const MapComponent = {
   renderFallbackMap(container) {
     if (!container) return;
     container.innerHTML = `
-      <div class="w-full h-full min-h-[400px] flex flex-col items-center justify-center bg-emerald-950 text-white p-6 text-center select-none">
+      <div class="w-full h-full min-h-[350px] flex flex-col items-center justify-center bg-emerald-950 text-white p-6 text-center select-none">
         <span class="text-4xl mb-3">🌾</span>
         <h4 class="text-lg font-bold text-emerald-300">Rede Nacional Juntos no Agro</h4>
         <p class="text-xs text-emerald-100/80 max-w-md mt-1">Conectando produtores, especialistas e pesquisadores em todo o território brasileiro.</p>
@@ -112,15 +112,17 @@ export const MapComponent = {
   },
 
   /**
-   * Solicita a geolocalização real do visitante via API nativa do navegador (HTTPS ou localhost)
+   * Solicita a geolocalização real do visitante via API nativa do navegador
    */
   requestUserGeolocation() {
     if (!navigator.geolocation) {
       console.log('[MapComponent] API de geolocalização não suportada neste navegador.');
+      if (leafletMap) {
+        leafletMap.setView([-14.2350, -51.9253], 4);
+      }
       return;
     }
 
-    // Configurações de precisão do GPS do dispositivo
     const geoOptions = {
       enableHighAccuracy: true,
       timeout: 15000,
@@ -135,18 +137,20 @@ export const MapComponent = {
     };
 
     const errorHandler = (error) => {
-      console.warn('[MapComponent] Aviso de geolocalização:', error.code, error.message);
+      console.warn('[MapComponent] Geolocalização indisponível ou negada:', error.code, error.message);
+      // Se a permissão for negada, centraliza na coordenada padrão do Brasil sem marcadores falsos
+      if (leafletMap) {
+        leafletMap.setView([-14.2350, -51.9253], 4);
+      }
       const gpsStatusEl = document.getElementById('map-gps-live-status');
       if (gpsStatusEl) {
-        if (error.code === 1) { // PERMISSION_DENIED
-          gpsStatusEl.innerHTML = `
-            <span class="flex items-center gap-1.5 text-amber-600 font-medium">
-              <span class="w-2 h-2 rounded-full bg-amber-500"></span>
-              GPS: Permissão pendente
-            </span>
-            <span class="text-[10px] text-muted-foreground font-mono">Brasil</span>
-          `;
-        }
+        gpsStatusEl.innerHTML = `
+          <span class="flex items-center gap-1.5 text-amber-600 font-medium">
+            <span class="w-2 h-2 rounded-full bg-amber-500"></span>
+            GPS: Localização padrão
+          </span>
+          <span class="text-[10px] text-muted-foreground font-mono">Brasil</span>
+        `;
       }
     };
 
@@ -154,28 +158,37 @@ export const MapComponent = {
       navigator.geolocation.getCurrentPosition(successHandler, errorHandler, geoOptions);
     } catch (e) {
       console.warn('[MapComponent] Falha ao invocar getCurrentPosition:', e);
+      if (leafletMap) {
+        leafletMap.setView([-14.2350, -51.9253], 4);
+      }
     }
   },
 
   /**
-   * Plota a localização GPS real do visitante com marcador broto/pulso e linha até a Sede
+   * Plota APENAS o marcador real do usuário e recentraliza com zoom 10
    */
   plotUserLocation(lat, lng) {
-    if (!leafletMap || !markersLayer || !linesLayer) return;
+    if (!leafletMap || !markersLayer) return;
 
-    const settings = StorageService.getSettings();
-    const sede = settings.sede || { name: 'Sede — Instrutor Principal', coords: [-14.235, -51.9253] };
+    // Validação de latitude/longitude
+    const isValid = !isNaN(lat) && !isNaN(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180;
+    if (!isValid) {
+      leafletMap.setView([-14.2350, -51.9253], 4);
+      return;
+    }
 
     // Limpa marcador anterior do usuário se houver
     if (this.userLocationMarker) {
       markersLayer.removeLayer(this.userLocationMarker);
+      this.userLocationMarker = null;
     }
     if (this.userLocationLine) {
-      linesLayer.removeLayer(this.userLocationLine);
+      if (linesLayer) linesLayer.removeLayer(this.userLocationLine);
+      this.userLocationLine = null;
     }
 
     // Marcador de localização do visitante com pulso esmeralda ativo
-    const userIcon = L.divIcon({
+    const userIcon = window.L.divIcon({
       className: 'custom-div-icon',
       html: `
         <div class="agro-pulse-marker" title="Você está aqui">
@@ -187,7 +200,7 @@ export const MapComponent = {
       iconAnchor: [16, 16]
     });
 
-    this.userLocationMarker = L.marker([lat, lng], { icon: userIcon })
+    this.userLocationMarker = window.L.marker([lat, lng], { icon: userIcon })
       .bindPopup(`
         <div class="text-center p-1">
           <strong class="text-sm font-bold text-emerald-700">📍 Sua Localização Atual</strong><br>
@@ -196,14 +209,8 @@ export const MapComponent = {
       `);
     markersLayer.addLayer(this.userLocationMarker);
 
-    // Linha de pulso visual conectando o visitante até a Sede Nacional
-    this.userLocationLine = L.polyline([sede.coords, [lat, lng]], {
-      className: 'agro-pulse-line',
-      color: '#10B981',
-      weight: 2.5,
-      opacity: 0.8
-    });
-    linesLayer.addLayer(this.userLocationLine);
+    // Recentraliza a visão do mapa nas coordenadas reais do visitante com zoom adequado (zoom 10)
+    leafletMap.setView([lat, lng], 10);
 
     // Atualiza o status de GPS no card flutuante
     const gpsStatusEl = document.getElementById('map-gps-live-status');
@@ -213,67 +220,43 @@ export const MapComponent = {
           <span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
           GPS Ativo · Você conectado
         </span>
+        <span class="text-[10px] text-muted-foreground font-mono">Ao vivo</span>
       `;
     }
-
-    // Suavemente enquadra a sede e o visitante
-    try {
-      const bounds = L.latLngBounds([sede.coords, [lat, lng]]);
-      leafletMap.fitBounds(bounds, { padding: [40, 40], maxZoom: 7, animate: true });
-    } catch {}
   },
 
-  renderMarkersAndLines(sede, points) {
+  /**
+   * Renderiza apenas marcadores reais cadastrados no banco de dados (sem dados mockados)
+   */
+  renderMarkersAndLines(points) {
     if (!leafletMap || !markersLayer || !linesLayer) return;
 
     markersLayer.clearLayers();
     linesLayer.clearLayers();
 
-    // 1. Marcador da Sede (Instrutor Principal) com efeito de destaque
-    const instructorIcon = L.divIcon({
-      className: 'custom-div-icon',
-      html: `
-        <div class="agro-instructor-marker" title="${sede.name}">
-          <div class="agro-instructor-ring"></div>
-          <div class="agro-instructor-dot">⭐</div>
-        </div>
-      `,
-      iconSize: [34, 34],
-      iconAnchor: [17, 17]
-    });
+    const activePoints = (points || []).filter(p => p.active !== false);
 
-    const sedeMarker = L.marker(sede.coords, { icon: instructorIcon })
-      .bindPopup(`<strong class="text-sm font-semibold">${sede.name}</strong><br><span class="text-xs text-gray-500">Coordenação Técnica Nacional</span>`);
-    markersLayer.addLayer(sedeMarker);
-
-    // 2. Marcador Broto/Folha com Pulso Ativo nas Cidades Conectadas
-    const sproutIcon = L.divIcon({
-      className: 'custom-div-icon',
-      html: `
-        <div class="agro-pulse-marker">
-          <div class="agro-pulse-ring"></div>
-          <div class="agro-pulse-dot">🌱</div>
-        </div>
-      `,
-      iconSize: [26, 26],
-      iconAnchor: [13, 13]
-    });
-
-    points.filter(p => p.active !== false).forEach(p => {
-      // Linha conectando Sede ao Ponto com efeito tracejado
-      const line = L.polyline([sede.coords, p.coords], {
-        className: 'agro-pulse-line',
-        color: '#2E7D32',
-        weight: 2,
-        opacity: 0.55
+    if (activePoints.length > 0) {
+      const sproutIcon = window.L.divIcon({
+        className: 'custom-div-icon',
+        html: `
+          <div class="agro-pulse-marker">
+            <div class="agro-pulse-ring"></div>
+            <div class="agro-pulse-dot">🌱</div>
+          </div>
+        `,
+        iconSize: [26, 26],
+        iconAnchor: [13, 13]
       });
-      linesLayer.addLayer(line);
 
-      // Marcador no ponto
-      const marker = L.marker(p.coords, { icon: sproutIcon })
-        .bindPopup(`<strong class="text-sm font-semibold">${p.name}</strong><br><span class="text-xs text-gray-500">Pólo Conectado Ativo</span>`);
-      markersLayer.addLayer(marker);
-    });
+      activePoints.forEach(p => {
+        if (p.coords && Array.isArray(p.coords) && p.coords.length === 2) {
+          const marker = window.L.marker(p.coords, { icon: sproutIcon })
+            .bindPopup(`<strong class="text-sm font-semibold">${p.name}</strong><br><span class="text-xs text-gray-500">Ponto Ativo Cadastrado</span>`);
+          markersLayer.addLayer(marker);
+        }
+      });
+    }
 
     // Re-plota localização do usuário se já obtida
     if (this.userLocation) {
@@ -281,6 +264,9 @@ export const MapComponent = {
     }
   },
 
+  /**
+   * Card flutuante sobre o mapa com estatísticas calculadas DINAMICAMENTE
+   */
   renderFloatingOverlay() {
     const overlay = document.getElementById('map-floating-overlay');
     if (!overlay) return;
@@ -289,22 +275,28 @@ export const MapComponent = {
     const points = settings.mapPoints || [];
     const activePoints = points.filter(p => p.active !== false);
 
-    // Contagem de estados distintos
+    // Contagem de estados reais distintos baseada apenas em pontos cadastrados
     const states = new Set();
     activePoints.forEach(p => {
-      const parts = p.name.split(',');
-      if (parts.length > 1) states.add(parts[1].trim());
+      const parts = p.name ? p.name.split(',') : [];
+      if (parts.length > 1) {
+        states.add(parts[parts.length - 1].trim());
+      } else if (p.state) {
+        states.add(p.state.trim());
+      }
     });
-    const stateCount = states.size || 12;
+
+    const stateCount = states.size;       // Exibe '0' se não houver dados
+    const pointsCount = activePoints.length; // Exibe '0' se não houver dados
 
     const isAdmin = AuthService.isAdmin();
 
     overlay.innerHTML = `
       <div class="glass-overlay rounded-2xl shadow-xl p-3.5 sm:p-4 w-64 sm:w-72 text-sm border border-border/80 animate-in-fade">
         <div class="flex items-center justify-between gap-2 mb-2">
-          <div class="flex items-center gap-2 text-primary font-bold text-xs sm:text-sm leading-tight">
+          <div class="flex items-center gap-2 text-primary font-bold text-xs sm:text-sm leading-tight min-w-0">
             <span class="inline-block w-2.5 h-2.5 rounded-full bg-emerald-600 animate-ping shrink-0"></span>
-            <span>${settings.heroTitle || 'Conectando Produtores em Todo o Brasil'}</span>
+            <span class="truncate">${settings.heroTitle || 'Conectando Produtores em Todo o Brasil'}</span>
           </div>
           ${isAdmin ? `
             <button id="btn-edit-map-hero" title="Editar Hero e Mapa" class="p-1 rounded text-primary hover:bg-primary/10 transition shrink-0">
@@ -328,7 +320,7 @@ export const MapComponent = {
             <span class="text-muted-foreground flex items-center gap-1.5">
               <i data-lucide="radio" class="w-3.5 h-3.5 text-primary"></i> Pontos conectados
             </span>
-            <span class="font-bold text-foreground">${activePoints.length + 1}</span>
+            <span class="font-bold text-foreground">${pointsCount}</span>
           </div>
           <div id="map-gps-live-status" class="flex items-center justify-between pt-1 border-t border-border/60">
             <span class="flex items-center gap-1.5 text-emerald-600 font-medium">
@@ -356,11 +348,10 @@ export const MapComponent = {
 
   refresh() {
     const settings = StorageService.getSettings();
-    const sede = settings.sede || { name: 'Sede — Instrutor Principal', coords: [-14.235, -51.9253] };
     const points = settings.mapPoints || [];
 
     if (leafletMap) {
-      this.renderMarkersAndLines(sede, points);
+      this.renderMarkersAndLines(points);
       this.renderFloatingOverlay();
       leafletMap.invalidateSize();
     }

@@ -235,13 +235,14 @@ class AppController {
     }
 
     // Alternar tema
-    if (btnToggleTheme) {
-      btnToggleTheme.addEventListener('click', () => {
-        this.currentTheme = this.currentTheme === 'light' ? 'dark' : 'light';
-        this.applyTheme(this.currentTheme);
-        if (labelTheme) labelTheme.textContent = this.currentTheme === 'light' ? 'Claro' : 'Escuro';
-      });
-    }
+    const toggleThemeFn = () => {
+      this.currentTheme = this.currentTheme === 'light' ? 'dark' : 'light';
+      this.applyTheme(this.currentTheme);
+    };
+
+    if (btnToggleTheme) btnToggleTheme.addEventListener('click', toggleThemeFn);
+    const btnDrawerToggleTheme = document.getElementById('btn-drawer-toggle-theme');
+    if (btnDrawerToggleTheme) btnDrawerToggleTheme.addEventListener('click', toggleThemeFn);
 
     // Ajuste de tamanho de fonte
     if (btnFontSm) btnFontSm.addEventListener('click', () => this.applyFontSize('sm'));
@@ -254,6 +255,8 @@ class AppController {
     localStorage.setItem('juntos_agro_theme', theme);
     const label = document.getElementById('label-current-theme');
     if (label) label.textContent = theme === 'light' ? 'Claro' : 'Escuro';
+    const drawerLabel = document.getElementById('label-drawer-theme');
+    if (drawerLabel) drawerLabel.textContent = theme === 'light' ? 'Claro' : 'Escuro';
   }
 
   applyFontSize(size) {

@@ -38,20 +38,7 @@ const INITIAL_SETTINGS = {
     name: 'Sede — Instrutor Principal',
     coords: [-14.235, -51.9253] // Centro geográfico do Brasil
   },
-  mapPoints: [
-    { id: 'pt-1', name: 'Manaus, AM', coords: [-3.119, -60.021], active: true },
-    { id: 'pt-2', name: 'Belém, PA', coords: [-1.455, -48.502], active: true },
-    { id: 'pt-3', name: 'Fortaleza, CE', coords: [-3.717, -38.543], active: true },
-    { id: 'pt-4', name: 'Recife, PE', coords: [-8.047, -34.877], active: true },
-    { id: 'pt-5', name: 'Salvador, BA', coords: [-12.971, -38.502], active: true },
-    { id: 'pt-6', name: 'Brasília, DF', coords: [-15.793, -47.882], active: true },
-    { id: 'pt-7', name: 'Belo Horizonte, MG', coords: [-19.916, -43.934], active: true },
-    { id: 'pt-8', name: 'São Paulo, SP', coords: [-23.55, -46.633], active: true },
-    { id: 'pt-9', name: 'Curitiba, PR', coords: [-25.428, -49.273], active: true },
-    { id: 'pt-10', name: 'Porto Alegre, RS', coords: [-30.034, -51.22], active: true },
-    { id: 'pt-11', name: 'Cuiabá, MT', coords: [-15.601, -56.097], active: true },
-    { id: 'pt-12', name: 'Goiânia, GO', coords: [-16.686, -49.264], active: true }
-  ]
+  mapPoints: []
 };
 
 const INITIAL_CATEGORIES = [
@@ -149,6 +136,14 @@ export const StorageService = {
   init() {
     if (!localStorage.getItem(STORAGE_KEYS.SETTINGS)) {
       localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(INITIAL_SETTINGS));
+    } else {
+      try {
+        const parsedSettings = JSON.parse(localStorage.getItem(STORAGE_KEYS.SETTINGS));
+        if (Array.isArray(parsedSettings.mapPoints) && parsedSettings.mapPoints.some(p => p.id === 'pt-1' && p.name && p.name.includes('Manaus'))) {
+          parsedSettings.mapPoints = [];
+          localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(parsedSettings));
+        }
+      } catch (_) {}
     }
     if (!localStorage.getItem(STORAGE_KEYS.CATEGORIES)) {
       localStorage.setItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(INITIAL_CATEGORIES));

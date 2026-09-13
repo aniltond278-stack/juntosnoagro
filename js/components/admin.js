@@ -330,7 +330,7 @@ export const AdminPanelComponent = {
             <label class="font-semibold block mb-1">Gerenciar Pontos do Mapa</label>
             <button type="button" id="btn-manage-map-points" class="w-full h-9 rounded-lg border border-border bg-muted hover:bg-muted/80 text-foreground text-xs font-semibold flex items-center justify-center gap-2">
               <i data-lucide="map" class="w-3.5 h-3.5 text-primary"></i>
-              <span>Editar Coordenadas do Mapa (${settings.mapPoints?.length || 12} locais)</span>
+              <span>Editar Coordenadas do Mapa (${settings.mapPoints?.length || 0} locais)</span>
             </button>
           </div>
         </div>
