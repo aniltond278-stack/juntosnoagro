@@ -246,53 +246,46 @@ export const StorageService = {
     this.recordSiteVisit();
   },
 
-  /* --- BANCO DE DADOS EM NUVEM (CLOUD SYNC) --- */
+  /* --- BANCO DE DADOS EM NUVEM (CLOUD SYNC EM TEMPO REAL) --- */
   broadcastChannel: null,
   cloudSyncIntervalId: null,
   isCloudSyncing: false,
-  cloudStatus: { connected: false, lastSync: null },
-
-  getCloudEndpoint() {
-    const settings = this.getSettings();
-    return (settings.cloudDbEndpoint || 'https://juntosnoagro-db-default-rtdb.firebaseio.com').trim().replace(/\/+$/, '');
-  },
+  cloudStatus: { connected: true, lastSync: null },
+  MASTER_CLOUD_DB_URL: 'https://api.restful-api.dev/objects/ff808181a067127101a09b0e0df309f4',
 
   initCloudSync() {
     // 1. Busca inicial imediata ao carregar a página
-    this.fetchDoubtsFromCloud();
+    this.fetchCloudData();
 
-    // 2. Polling contínuo em segundo plano a cada 8 segundos (sincronização multi-dispositivo)
+    // 2. Polling contínuo em segundo plano a cada 3.5 segundos para sincronização multi-dispositivo em tempo real
     if (!this.cloudSyncIntervalId) {
       this.cloudSyncIntervalId = setInterval(() => {
-        this.fetchDoubtsFromCloud();
-      }, 8000);
+        this.fetchCloudData();
+      }, 3500);
     }
 
     // 3. Sincroniza imediatamente quando a janela/aba volta a ficar ativa
     if (typeof document !== 'undefined') {
       document.addEventListener('visibilitychange', () => {
         if (!document.hidden) {
-          this.fetchDoubtsFromCloud();
+          this.fetchCloudData();
         }
       });
       window.addEventListener('focus', () => {
-        this.fetchDoubtsFromCloud();
+        this.fetchCloudData();
       });
     }
   },
 
-  async fetchDoubtsFromCloud() {
+  async fetchCloudData() {
     if (this.isCloudSyncing) return null;
     this.isCloudSyncing = true;
 
     try {
-      const endpoint = this.getCloudEndpoint();
-      const url = `${endpoint}/doubts.json`;
-
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 6000);
 
-      const res = await fetch(url, {
+      const res = await fetch(this.MASTER_CLOUD_DB_URL, {
         method: 'GET',
         headers: { 'Accept': 'application/json' },
         signal: controller.signal
@@ -304,51 +297,124 @@ export const StorageService = {
         return null;
       }
 
-      const remoteData = await res.json();
+      const payload = await res.json();
       this.cloudStatus.connected = true;
       this.cloudStatus.lastSync = new Date().toISOString();
 
-      if (!remoteData) return [];
+      const cloudData = payload.data || {};
+      const remoteDoubts = Array.isArray(cloudData.doubts) ? cloudData.doubts : [];
+      const remoteMessages = Array.isArray(cloudData.chat_messages) ? cloudData.chat_messages : [];
+      const remoteConvs = Array.isArray(cloudData.chat_conversations) ? cloudData.chat_conversations : [];
 
-      let remoteDoubts = [];
-      if (Array.isArray(remoteData)) {
-        remoteDoubts = remoteData.filter(Boolean);
-      } else if (typeof remoteData === 'object') {
-        remoteDoubts = Object.keys(remoteData).map(k => ({
-          ...remoteData[k],
-          id: remoteData[k].id || k
-        }));
-      }
-
-      // Mescla com dúvidas locais (preserva dúvidas locais recentes e adiciona as da nuvem)
+      // --- Sincronização de Dúvidas ---
       const localDoubts = this.getDoubts();
-      const localMap = new Map(localDoubts.map(d => [d.id, d]));
-      let hasChanges = false;
+      const localDoubtsMap = new Map(localDoubts.map(d => [d.id, d]));
+      let doubtsChanged = false;
 
       remoteDoubts.forEach(rd => {
         if (!rd || !rd.id) return;
-        const local = localMap.get(rd.id);
+        const local = localDoubtsMap.get(rd.id);
         if (!local || JSON.stringify(local) !== JSON.stringify(rd)) {
-          localMap.set(rd.id, rd);
-          hasChanges = true;
+          localDoubtsMap.set(rd.id, rd);
+          doubtsChanged = true;
         }
       });
 
-      if (hasChanges) {
-        const merged = Array.from(localMap.values()).sort((a, b) => {
+      // Se houver dúvidas locais que ainda não estão na nuvem, faz push
+      const remoteIds = new Set(remoteDoubts.map(d => d.id));
+      const hasUnsyncedLocalDoubts = localDoubts.some(d => !remoteIds.has(d.id));
+
+      if (doubtsChanged || localDoubts.length !== localDoubtsMap.size) {
+        const mergedDoubts = Array.from(localDoubtsMap.values()).sort((a, b) => {
           return new Date(b.created_date || 0) - new Date(a.created_date || 0);
         });
-        localStorage.setItem(STORAGE_KEYS.DOUBTS, JSON.stringify(merged));
+        localStorage.setItem(STORAGE_KEYS.DOUBTS, JSON.stringify(mergedDoubts));
         this.emitChange('doubts');
       }
 
-      return remoteDoubts;
+      // --- Sincronização de Mensagens do Chat ---
+      const localMessages = this.getAllMessages();
+      const localMsgsMap = new Map(localMessages.map(m => [m.id, m]));
+      let chatChanged = false;
+
+      remoteMessages.forEach(rm => {
+        if (!rm || !rm.id) return;
+        if (!localMsgsMap.has(rm.id)) {
+          localMsgsMap.set(rm.id, rm);
+          chatChanged = true;
+        }
+      });
+
+      // --- Sincronização de Conversas do Chat ---
+      const localConvs = this.getChatConversations();
+      const localConvsMap = new Map(localConvs.map(c => [c.id, c]));
+
+      remoteConvs.forEach(rc => {
+        if (!rc || !rc.id) return;
+        const localC = localConvsMap.get(rc.id);
+        if (!localC || JSON.stringify(localC) !== JSON.stringify(rc)) {
+          localConvsMap.set(rc.id, rc);
+          chatChanged = true;
+        }
+      });
+
+      if (chatChanged) {
+        const mergedMsgs = Array.from(localMsgsMap.values());
+        const mergedConvs = Array.from(localConvsMap.values()).sort((a, b) => (b.last_activity || 0) - (a.last_activity || 0));
+        localStorage.setItem(STORAGE_KEYS.CHAT_MESSAGES, JSON.stringify(mergedMsgs));
+        localStorage.setItem(STORAGE_KEYS.CHAT_CONVERSATIONS, JSON.stringify(mergedConvs));
+        this.emitChange('chat');
+      }
+
+      if (hasUnsyncedLocalDoubts) {
+        this.pushStateToCloud();
+      }
+
+      return { doubts: remoteDoubts, chat_messages: remoteMessages, chat_conversations: remoteConvs };
     } catch (err) {
       this.cloudStatus.connected = false;
       return null;
     } finally {
       this.isCloudSyncing = false;
     }
+  },
+
+  async pushStateToCloud() {
+    try {
+      const doubts = this.getDoubts();
+      const chat_messages = this.getAllMessages();
+      const chat_conversations = this.getChatConversations();
+
+      const body = {
+        data: {
+          version: Date.now(),
+          last_updated: new Date().toISOString(),
+          doubts,
+          chat_messages,
+          chat_conversations
+        }
+      };
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
+
+      const res = await fetch(this.MASTER_CLOUD_DB_URL, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+
+      if (res.ok) {
+        this.cloudStatus.connected = true;
+        this.cloudStatus.lastSync = new Date().toISOString();
+        return true;
+      }
+    } catch (err) {
+      console.warn('[StorageService] Falha ao sincronizar com nuvem:', err);
+    }
+    return false;
   },
 
   broadcastSync(resource, action, payload) {
@@ -546,8 +612,8 @@ export const StorageService = {
     // 2. Transmissão imediata via BroadcastChannel para outras abas abertas
     this.broadcastSync('doubts', 'CREATE', newDoubt);
 
-    // 3. Persistência remota em nuvem (assíncrona e resiliente)
-    this.saveDoubtToCloud(newDoubt);
+    // 3. Persistência remota em nuvem em tempo real
+    this.pushStateToCloud();
 
     return newDoubt;
   },
@@ -560,7 +626,7 @@ export const StorageService = {
       localStorage.setItem(STORAGE_KEYS.DOUBTS, JSON.stringify(doubts));
       this.emitChange('doubts');
       this.broadcastSync('doubts', 'UPDATE', { id, status: newStatus });
-      this.updateDoubtInCloud(id, { status: newStatus });
+      this.pushStateToCloud();
     }
     return item;
   },
@@ -571,93 +637,23 @@ export const StorageService = {
     localStorage.setItem(STORAGE_KEYS.DOUBTS, JSON.stringify(doubts));
     this.emitChange('doubts');
     this.broadcastSync('doubts', 'DELETE', { id });
-    this.deleteDoubtFromCloud(id);
+    this.pushStateToCloud();
     return true;
   },
 
-  /**
-   * Envia uma nova dúvida para a nuvem
-   */
-  async saveDoubtToCloud(doubt) {
-    try {
-      const endpoint = this.getCloudEndpoint();
-      const url = `${endpoint}/doubts/${encodeURIComponent(doubt.id)}.json`;
-
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 8000);
-
-      const res = await fetch(url, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(doubt),
-        signal: controller.signal
-      });
-      clearTimeout(timeoutId);
-
-      if (res.ok) {
-        this.cloudStatus.connected = true;
-        this.cloudStatus.lastSync = new Date().toISOString();
-        return true;
-      }
-    } catch (err) {
-      // Resiliente: a dúvida permanece no cache local
-      console.warn('[StorageService] Nuvem temporariamente inacessível. Dúvida mantida localmente:', err);
-    }
-    return false;
-  },
-
-  /**
-   * Atualiza o status de uma dúvida na nuvem
-   */
-  async updateDoubtInCloud(id, updates) {
-    try {
-      const endpoint = this.getCloudEndpoint();
-      const url = `${endpoint}/doubts/${encodeURIComponent(id)}.json`;
-
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 8000);
-
-      const res = await fetch(url, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updates),
-        signal: controller.signal
-      });
-      clearTimeout(timeoutId);
-      return res.ok;
-    } catch (err) {
-      console.warn('[StorageService] Erro ao sincronizar atualização na nuvem:', err);
-      return false;
-    }
-  },
-
-  /**
-   * Remove uma dúvida da nuvem
-   */
-  async deleteDoubtFromCloud(id) {
-    try {
-      const endpoint = this.getCloudEndpoint();
-      const url = `${endpoint}/doubts/${encodeURIComponent(id)}.json`;
-
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 8000);
-
-      const res = await fetch(url, {
-        method: 'DELETE',
-        signal: controller.signal
-      });
-      clearTimeout(timeoutId);
-      return res.ok;
-    } catch (err) {
-      console.warn('[StorageService] Erro ao remover dúvida da nuvem:', err);
-      return false;
-    }
-  },
-
-  /* --- CHAT PRIVADO --- */
+  /* --- CHAT PRIVADO COM PERSISTÊNCIA EM NUVEM --- */
   getChatConversations() {
     try {
       const data = localStorage.getItem(STORAGE_KEYS.CHAT_CONVERSATIONS);
+      return data ? JSON.parse(data) : [];
+    } catch {
+      return [];
+    }
+  },
+
+  getAllMessages() {
+    try {
+      const data = localStorage.getItem(STORAGE_KEYS.CHAT_MESSAGES);
       return data ? JSON.parse(data) : [];
     } catch {
       return [];
@@ -679,23 +675,18 @@ export const StorageService = {
       convs.unshift(conv);
       localStorage.setItem(STORAGE_KEYS.CHAT_CONVERSATIONS, JSON.stringify(convs));
       this.emitChange('chat');
+      this.pushStateToCloud();
     }
     return conv;
   },
 
   getMessages(conversationId) {
-    try {
-      const data = localStorage.getItem(STORAGE_KEYS.CHAT_MESSAGES);
-      const allMessages = data ? JSON.parse(data) : [];
-      return allMessages.filter(m => m.conversation_id === conversationId);
-    } catch {
-      return [];
-    }
+    const allMessages = this.getAllMessages();
+    return allMessages.filter(m => m.conversation_id === conversationId);
   },
 
   addMessage({ conversation_id, sender, text, attachments = [], audio_url = null }) {
-    const allData = localStorage.getItem(STORAGE_KEYS.CHAT_MESSAGES);
-    const messages = allData ? JSON.parse(allData) : [];
+    const messages = this.getAllMessages();
 
     const newMsg = {
       id: 'msg-' + Date.now() + '-' + Math.random().toString(36).substr(2, 5),
@@ -712,7 +703,7 @@ export const StorageService = {
 
     // Atualiza conversa
     const convs = this.getChatConversations();
-    const conv = convs.find(c => c.id === conversation_id);
+    let conv = convs.find(c => c.id === conversation_id);
     if (conv) {
       conv.last_message = text ? SecurityService.sanitizeText(text) : (audio_url ? 'Mensagem de áudio' : 'Anexo enviado');
       conv.last_activity = Date.now();
@@ -727,6 +718,9 @@ export const StorageService = {
     }
 
     this.emitChange('chat');
+    this.broadcastSync('chat', 'NEW_MESSAGE', newMsg);
+    this.pushStateToCloud();
+
     return newMsg;
   },
 

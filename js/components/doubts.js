@@ -34,7 +34,7 @@ export const DoubtsComponent = {
         badge.className = 'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-500/10 text-blue-600 border border-blue-500/20';
       }
 
-      await StorageService.fetchDoubtsFromCloud();
+      await StorageService.fetchCloudData();
 
       setTimeout(() => {
         syncBtn.disabled = false;
