@@ -1,7 +1,8 @@
 /**
  * JUNTOS NO AGRO - MAPA INTERATIVO E HERO OVERLAY COM GEOLOCALIZAÇÃO REAL (GPS)
  * Leaflet com tiles OpenStreetMap, marcadores reais calculados dinamicamente do banco de dados,
- * overlay dinâmico (sem dados fictícios) e rastreamento GPS real do visitante.
+ * overlay dinâmico (sem dados fictícios), rastreamento GPS real do visitante e
+ * prevenção contra captura indevida de rolagem mobile (Scroll Trap prevention).
  */
 
 import { StorageService } from '../storage.js';
@@ -15,6 +16,7 @@ export const MapComponent = {
   userLocationMarker: null,
   userLocationLine: null,
   userLocation: null,
+  isInteracting: false,
 
   init(containerId = 'agro-map-container') {
     const container = document.getElementById(containerId);
@@ -54,12 +56,22 @@ export const MapComponent = {
         leafletMap = null;
       }
 
+      // Detecção de mobile para prevenir scroll trap no toque
+      const isMobile = (window.L.Browser && window.L.Browser.mobile) || window.innerWidth < 768;
+      this.isInteracting = !isMobile;
+
+      // Permite rolagem vertical nativa da página sem prender o dedo quando travado
+      container.style.touchAction = isMobile ? 'pan-y' : 'auto';
+
       // Inicializa o mapa com coordenadas padrão centralizadas no Brasil (zoom 4)
       leafletMap = window.L.map(containerId, {
         center: [-14.2350, -51.9253],
         zoom: 4,
         zoomControl: false,
-        scrollWheelZoom: false,
+        scrollWheelZoom: false, // Desativado para não capturar a rolagem do mouse
+        dragging: !isMobile,     // Desativado por padrão no mobile
+        touchZoom: !isMobile,    // Desativado por padrão no mobile
+        tap: !isMobile,          // Desativado por padrão no mobile
         attributionControl: false
       });
 
@@ -74,6 +86,9 @@ export const MapComponent = {
 
       // Renderiza apenas marcadores reais cadastrados
       this.renderMarkersAndLines(points);
+
+      // Configura botão de alternância de interação para telas touch
+      this.setupInteractionToggle();
 
       // Solicita geolocalização nativa real do visitante
       this.requestUserGeolocation();
@@ -94,6 +109,59 @@ export const MapComponent = {
       console.error('[MapComponent] Erro capturado ao montar o Leaflet Map:', err);
       this.renderFallbackMap(container);
     }
+  },
+
+  /**
+   * Configura o botão de alternar interação no mapa (evita scroll trap no mobile)
+   */
+  setupInteractionToggle() {
+    const toggleBtn = document.getElementById('btn-toggle-map-interaction');
+    const container = document.getElementById('agro-map-container');
+    if (!toggleBtn) return;
+
+    // Atualiza o visual do botão
+    const updateButtonUI = (btn) => {
+      const iconEl = btn.querySelector('#map-interaction-icon');
+      const textEl = btn.querySelector('#map-interaction-text');
+
+      if (this.isInteracting) {
+        if (iconEl) iconEl.textContent = '🔒';
+        if (textEl) textEl.textContent = 'Travar Mapa';
+        btn.className = 'flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary text-white border border-primary shadow-lg text-xs font-bold transition select-none';
+        if (container) container.style.touchAction = 'none';
+      } else {
+        if (iconEl) iconEl.textContent = '🔓';
+        if (textEl) textEl.textContent = 'Interagir com o Mapa';
+        btn.className = 'flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-card/95 dark:bg-card/95 backdrop-blur-md border border-border text-foreground shadow-lg text-xs font-semibold hover:bg-card transition select-none';
+        if (container) container.style.touchAction = 'pan-y';
+      }
+    };
+
+    updateButtonUI(toggleBtn);
+
+    // Substitui nó para garantir event listener limpo sem duplicidade
+    const newBtn = toggleBtn.cloneNode(true);
+    toggleBtn.parentNode.replaceChild(newBtn, toggleBtn);
+
+    newBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!leafletMap) return;
+
+      this.isInteracting = !this.isInteracting;
+
+      if (this.isInteracting) {
+        leafletMap.dragging.enable();
+        if (leafletMap.touchZoom) leafletMap.touchZoom.enable();
+        if (leafletMap.tap) leafletMap.tap.enable();
+      } else {
+        leafletMap.dragging.disable();
+        if (leafletMap.touchZoom) leafletMap.touchZoom.disable();
+        if (leafletMap.tap) leafletMap.tap.disable();
+      }
+
+      updateButtonUI(newBtn);
+    });
   },
 
   renderFallbackMap(container) {
@@ -353,6 +421,7 @@ export const MapComponent = {
     if (leafletMap) {
       this.renderMarkersAndLines(points);
       this.renderFloatingOverlay();
+      this.setupInteractionToggle();
       leafletMap.invalidateSize();
     }
   }

@@ -154,9 +154,9 @@
       </div>
     </div>
 
-    <!-- GAVETA LATERAL MOBILE (DRAWER) COM Z-INDEX ELEVADO E FUNDO OPACO -->
-    <div id="mobile-drawer-backdrop" class="hidden fixed inset-0 bg-black/60 backdrop-blur-xs z-[200] transition-opacity"></div>
-    <div id="mobile-drawer-menu" class="fixed top-0 left-0 bottom-0 w-72 max-w-[85vw] bg-card border-r border-border z-[201] drawer-enter shadow-2xl flex flex-col p-5 overflow-y-auto">
+    <!-- GAVETA LATERAL MOBILE (DRAWER) COM FUNDO SÓLIDO OPACO E BACKDROP ESCURECIDO -->
+    <div id="mobile-drawer-backdrop" class="hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-50 transition-opacity"></div>
+    <div id="mobile-drawer-menu" class="fixed top-0 left-0 bottom-0 w-72 max-w-[85vw] bg-white dark:bg-slate-900 border-r border-border z-50 drawer-enter shadow-2xl flex flex-col p-5 overflow-y-auto">
       <div class="flex items-center justify-between pb-4 border-b border-border mb-4">
         <div class="flex items-center gap-2.5 min-w-0">
           <div class="w-8 h-8 rounded-xl bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-white shadow-sm shrink-0">
@@ -261,6 +261,14 @@
 
         <!-- Card de Métricas Flutuando como Overlay sobre o Mapa -->
         <div id="map-floating-overlay" class="absolute top-3 left-3 sm:top-4 sm:left-4 z-[500] pointer-events-auto max-w-[calc(100vw-2.5rem)]"></div>
+
+        <!-- Botão Toggle de Interação do Mapa (Prevenção de Scroll Trap Mobile) -->
+        <div class="absolute bottom-3 right-3 sm:bottom-4 sm:right-4 z-[500] pointer-events-auto">
+          <button id="btn-toggle-map-interaction" class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-card/95 backdrop-blur-md border border-border text-foreground shadow-lg text-xs font-semibold hover:bg-card active:scale-95 transition select-none" title="Alternar movimentação do mapa">
+            <span id="map-interaction-icon">🔓</span>
+            <span id="map-interaction-text">Interagir com o Mapa</span>
+          </button>
+        </div>
       </div>
 
       <!-- TÍTULO DA SEÇÃO DE CONTEÚDOS & AÇÕES -->

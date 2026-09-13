@@ -246,10 +246,23 @@ html, body {
   padding-bottom: max(0.5rem, env(safe-area-inset-bottom, 0.5rem));
 }
 
-/* Animações e opacidade da gaveta mobile (Drawer) */
+/* Animações e opacidade sólida da gaveta mobile (Drawer) */
 #mobile-drawer-menu {
-  background-color: var(--card) !important;
+  background-color: #ffffff !important;
   opacity: 1 !important;
+}
+
+[data-theme="dark"] #mobile-drawer-menu,
+.dark #mobile-drawer-menu {
+  background-color: #0f172a !important;
+}
+
+.map-touch-pan {
+  touch-action: pan-y !important;
+}
+
+.map-touch-locked {
+  touch-action: none !important;
 }
 
 .drawer-enter {
