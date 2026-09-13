@@ -1,4 +1,4 @@
-// Conexão direta com a nuvem Supabase
+// Conexao direta com a nuvem Supabase
 const SUPABASE_URL = 'https://queddkfmrgcinngovxbk.supabase.co/rest/v1';
 const API_KEY = 'sb_publishable_qDyXO7183qhEySNZePGchQ_qOzQ7cSk';
 
