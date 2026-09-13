@@ -210,7 +210,7 @@ body {
 /* Leaflet Container customization */
 #agro-map-container {
   height: 480px !important;
-  min-height: 400px !important;
+  min-height: 350px !important;
   width: 100% !important;
   position: relative !important;
   z-index: 1 !important;
@@ -218,8 +218,8 @@ body {
 
 @media (max-width: 768px) {
   #agro-map-container {
-    height: 440px !important;
-    min-height: 380px !important;
+    height: 400px !important;
+    min-height: 350px !important;
   }
 }
 
@@ -271,5 +271,26 @@ html, body {
   textarea {
     font-size: 16px !important;
   }
+
+  /* Modais em tela adaptada no smartphone sem cortar conteúdo */
+  #modal-auth-login > div.relative,
+  #modal-content-editor > div.relative,
+  #modal-category-editor > div.relative,
+  #modal-new-doubt > div.relative,
+  #modal-hero-map-editor > div.relative {
+    width: 100% !important;
+    max-width: 100vw !important;
+    max-height: 94vh !important;
+    margin: auto 0.5rem !important;
+    padding: 1.25rem 1rem !important;
+    border-radius: 1.25rem !important;
+  }
+
+  /* Elimina sobreposição de textos e ajusta quebra de linhas */
+  h1, h2, h3, h4, .truncate-mobile {
+    word-break: break-word;
+    overflow-wrap: break-word;
+  }
 }
+
 

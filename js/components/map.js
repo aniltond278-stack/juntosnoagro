@@ -112,30 +112,49 @@ export const MapComponent = {
   },
 
   /**
-   * Solicita a geolocalização real do visitante via API nativa do navegador
+   * Solicita a geolocalização real do visitante via API nativa do navegador (HTTPS ou localhost)
    */
   requestUserGeolocation() {
     if (!navigator.geolocation) {
-      console.log('API de geolocalização não disponível no navegador.');
+      console.log('[MapComponent] API de geolocalização não suportada neste navegador.');
       return;
     }
 
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const { latitude, longitude } = position.coords;
-        this.userLocation = [latitude, longitude];
-        this.plotUserLocation(latitude, longitude);
-      },
-      (error) => {
-        // Fallback suave sem interromper a navegação em caso de recusa
-        console.log('Geolocalização não autorizada ou indisponível:', error.code, error.message);
-      },
-      {
-        enableHighAccuracy: true,
-        timeout: 12000,
-        maximumAge: 60000
+    // Configurações de precisão do GPS do dispositivo
+    const geoOptions = {
+      enableHighAccuracy: true,
+      timeout: 15000,
+      maximumAge: 30000
+    };
+
+    const successHandler = (position) => {
+      const { latitude, longitude } = position.coords;
+      this.userLocation = [latitude, longitude];
+      this.plotUserLocation(latitude, longitude);
+      console.log(`[MapComponent] GPS capturado com sucesso: lat=${latitude}, lng=${longitude}`);
+    };
+
+    const errorHandler = (error) => {
+      console.warn('[MapComponent] Aviso de geolocalização:', error.code, error.message);
+      const gpsStatusEl = document.getElementById('map-gps-live-status');
+      if (gpsStatusEl) {
+        if (error.code === 1) { // PERMISSION_DENIED
+          gpsStatusEl.innerHTML = `
+            <span class="flex items-center gap-1.5 text-amber-600 font-medium">
+              <span class="w-2 h-2 rounded-full bg-amber-500"></span>
+              GPS: Permissão pendente
+            </span>
+            <span class="text-[10px] text-muted-foreground font-mono">Brasil</span>
+          `;
+        }
       }
-    );
+    };
+
+    try {
+      navigator.geolocation.getCurrentPosition(successHandler, errorHandler, geoOptions);
+    } catch (e) {
+      console.warn('[MapComponent] Falha ao invocar getCurrentPosition:', e);
+    }
   },
 
   /**

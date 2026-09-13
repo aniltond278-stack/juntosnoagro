@@ -73,7 +73,7 @@ const INITIAL_CONTENTS = [
     media_url: 'https://www.youtube.com',
     image_url: CATEGORY_IMAGES['Irrigação'],
     is_featured: true,
-    views: 432,
+    views: 0,
     created_date: new Date(Date.now() - 86400000 * 2).toISOString()
   },
   {
@@ -86,7 +86,7 @@ const INITIAL_CONTENTS = [
     media_url: 'https://www.embrapa.br',
     image_url: CATEGORY_IMAGES['Solos'],
     is_featured: true,
-    views: 615,
+    views: 0,
     created_date: new Date(Date.now() - 86400000 * 4).toISOString()
   },
   {
@@ -99,7 +99,7 @@ const INITIAL_CONTENTS = [
     media_url: 'https://www.embrapa.br',
     image_url: CATEGORY_IMAGES['Proteção de Plantas'],
     is_featured: true,
-    views: 890,
+    views: 0,
     created_date: new Date(Date.now() - 86400000 * 6).toISOString()
   },
   {
@@ -112,7 +112,7 @@ const INITIAL_CONTENTS = [
     media_url: '',
     image_url: CATEGORY_IMAGES['Pecuária'],
     is_featured: false,
-    views: 298,
+    views: 0,
     created_date: new Date(Date.now() - 86400000 * 8).toISOString()
   },
   {
@@ -125,7 +125,7 @@ const INITIAL_CONTENTS = [
     media_url: 'https://www.youtube.com',
     image_url: CATEGORY_IMAGES['Mecanização'],
     is_featured: false,
-    views: 387,
+    views: 0,
     created_date: new Date(Date.now() - 86400000 * 10).toISOString()
   },
   {
@@ -138,45 +138,12 @@ const INITIAL_CONTENTS = [
     media_url: 'https://www.embrapa.br',
     image_url: CATEGORY_IMAGES['Irrigação'],
     is_featured: false,
-    views: 210,
+    views: 0,
     created_date: new Date(Date.now() - 86400000 * 12).toISOString()
   }
 ];
 
-const INITIAL_DOUBTS = [
-  {
-    id: 'dbt-1',
-    title: 'Qual a época ideal para iniciar a adubação de cobertura no milho safrinha?',
-    author_name: 'José Ribeiro (GO)',
-    category: 'Solos',
-    description: 'Gostaria de saber qual estágio fenológico (V4 ou V6) proporciona melhor aproveitamento do nitrogênio com menor risco de perdas.',
-    status: 'pending', // 'pending' | 'in_review' | 'done'
-    attachments: [],
-    created_date: new Date(Date.now() - 3600000 * 4).toISOString()
-  },
-  {
-    id: 'dbt-2',
-    title: 'Sintomas de queima nas bordas das folhas do tomateiro',
-    author_name: 'Ana Paula (SP)',
-    category: 'Proteção de Plantas',
-    description: 'Apareceram manchas necróticas circulares com anéis concêntricos após período chuvoso. Pode ser pinta preta?',
-    status: 'in_review',
-    attachments: [
-      { name: 'folha_tomate.jpg', url: 'https://images.unsplash.com/photo-1592417817098-8f3d6eb22513?w=500&auto=format&fit=crop' }
-    ],
-    created_date: new Date(Date.now() - 86400000).toISOString()
-  },
-  {
-    id: 'dbt-3',
-    title: 'Vazão irregular nos gotejadores do setor 3',
-    author_name: 'Carlos Mendes (CE)',
-    category: 'Irrigação',
-    description: 'A pressão do manômetro está normal, mas alguns emissores estão gotejando muito fraco. Como fazer limpeza de biofilme?',
-    status: 'done',
-    attachments: [],
-    created_date: new Date(Date.now() - 86400000 * 3).toISOString()
-  }
-];
+const INITIAL_DOUBTS = [];
 
 export const StorageService = {
   init() {
@@ -189,16 +156,53 @@ export const StorageService = {
     if (!localStorage.getItem(STORAGE_KEYS.CONTENTS)) {
       localStorage.setItem(STORAGE_KEYS.CONTENTS, JSON.stringify(INITIAL_CONTENTS));
     }
-    if (!localStorage.getItem(STORAGE_KEYS.DOUBTS)) {
-      localStorage.setItem(STORAGE_KEYS.DOUBTS, JSON.stringify(INITIAL_DOUBTS));
+
+    // Limpeza de dúvidas mockadas antigas se existirem no navegador
+    const existingDoubts = localStorage.getItem(STORAGE_KEYS.DOUBTS);
+    if (!existingDoubts) {
+      localStorage.setItem(STORAGE_KEYS.DOUBTS, JSON.stringify([]));
+    } else {
+      try {
+        const parsed = JSON.parse(existingDoubts);
+        // Se ainda contiver as dúvidas mockadas antigas (dbt-1, dbt-2, dbt-3 com textos padrão), limpa para iniciar zerado
+        const isMocked = Array.isArray(parsed) && parsed.some(d => d.id === 'dbt-1' && d.author_name === 'José Ribeiro (GO)');
+        if (isMocked) {
+          localStorage.setItem(STORAGE_KEYS.DOUBTS, JSON.stringify([]));
+        }
+      } catch (_) {
+        localStorage.setItem(STORAGE_KEYS.DOUBTS, JSON.stringify([]));
+      }
     }
+
+    // Limpeza de métricas fictícias antigas (ex: 1280 base)
+    const existingMetrics = localStorage.getItem(STORAGE_KEYS.METRICS);
+    if (!existingMetrics || parseInt(existingMetrics, 10) >= 1280) {
+      localStorage.setItem(STORAGE_KEYS.METRICS, '1');
+    }
+
     if (!localStorage.getItem(STORAGE_KEYS.CHAT_CONVERSATIONS)) {
       localStorage.setItem(STORAGE_KEYS.CHAT_CONVERSATIONS, JSON.stringify([]));
     }
     if (!localStorage.getItem(STORAGE_KEYS.CHAT_MESSAGES)) {
       localStorage.setItem(STORAGE_KEYS.CHAT_MESSAGES, JSON.stringify([]));
     }
-    // Incrementa contagem de acessos do site
+
+    // Ouve sincronização entre abas/janelas em tempo real
+    window.addEventListener('storage', (event) => {
+      if (event.key === STORAGE_KEYS.DOUBTS) {
+        this.emitChange('doubts');
+      } else if (event.key === STORAGE_KEYS.CONTENTS) {
+        this.emitChange('contents');
+      } else if (event.key === STORAGE_KEYS.CHAT_CONVERSATIONS || event.key === STORAGE_KEYS.CHAT_MESSAGES) {
+        this.emitChange('chat');
+      } else if (event.key === STORAGE_KEYS.SETTINGS) {
+        this.emitChange('settings');
+      } else if (event.key === STORAGE_KEYS.CATEGORIES) {
+        this.emitChange('categories');
+      }
+    });
+
+    // Incrementa contagem de acessos real do site
     this.recordSiteVisit();
   },
 
@@ -478,7 +482,7 @@ export const StorageService = {
 
   /* --- METRICS / KPIS --- */
   recordSiteVisit() {
-    let visits = parseInt(localStorage.getItem(STORAGE_KEYS.METRICS) || '1280', 10);
+    let visits = parseInt(localStorage.getItem(STORAGE_KEYS.METRICS) || '0', 10);
     visits += 1;
     localStorage.setItem(STORAGE_KEYS.METRICS, visits.toString());
   },
@@ -487,16 +491,16 @@ export const StorageService = {
     const contents = this.getContents();
     const doubts = this.getDoubts();
     const convs = this.getChatConversations();
-    const baseVisits = parseInt(localStorage.getItem(STORAGE_KEYS.METRICS) || '1280', 10);
+    const realVisits = parseInt(localStorage.getItem(STORAGE_KEYS.METRICS) || '0', 10);
 
-    // Total de acessos = visitas + visualizações de conteúdos
+    // Total de acessos = visitas reais + visualizações reais de conteúdos
     const totalViews = contents.reduce((acc, c) => acc + (c.views || 0), 0);
-    const totalAccesses = baseVisits + totalViews;
+    const totalAccesses = realVisits + totalViews;
 
     // Conteúdos publicados
     const publishedCount = contents.length;
 
-    // Dúvidas pendentes
+    // Dúvidas pendentes (reflete em tempo real a quantidade exata de perguntas cadastradas)
     const pendingDoubts = doubts.filter(d => d.status === 'pending').length;
 
     // Taxa de resposta no chat

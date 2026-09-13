@@ -224,34 +224,34 @@
          ===================================================================== -->
     <section id="tab-content-conteudo" class="space-y-8 animate-in-fade">
 
-      <!-- BANNER HERO SUPERIOR -->
-      <div class="relative rounded-3xl overflow-hidden shadow-lg h-48 md:h-60 border border-border">
+      <!-- BANNER HERO SUPERIOR (RESPONSIVO E SEM SOBREPOSIÇÃO) -->
+      <div class="relative rounded-3xl overflow-hidden shadow-lg min-h-[13rem] sm:min-h-[14rem] md:h-60 border border-border flex flex-col justify-center">
         <img 
           src="https://media.base44.com/images/public/6aa5dda7dffe8d7aff83f886/73f734e12_generated_image.png" 
           alt="Juntos no Agro" 
           class="absolute inset-0 w-full h-full object-cover" 
         />
-        <div class="absolute inset-0 bg-gradient-to-r from-emerald-950/90 via-emerald-900/65 to-transparent flex flex-col justify-center px-6 md:px-12 text-white">
-          <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/15 backdrop-blur-md text-xs font-semibold w-fit mb-2 border border-white/20">
-            <i data-lucide="shield-check" class="w-3.5 h-3.5 text-yellow-300"></i>
-            Plataforma 100% Segura & Atualizada
+        <div class="relative z-10 bg-gradient-to-r from-emerald-950/95 via-emerald-900/80 to-transparent/40 flex flex-col justify-center px-4 sm:px-6 md:px-12 py-5 sm:py-6 text-white">
+          <div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/15 backdrop-blur-md text-[11px] sm:text-xs font-semibold w-fit mb-2 border border-white/20">
+            <i data-lucide="shield-check" class="w-3.5 h-3.5 text-yellow-300 shrink-0"></i>
+            <span class="truncate">Plataforma 100% Segura & Atualizada</span>
           </div>
-          <h1 id="hero-banner-title" class="text-3xl md:text-5xl font-black tracking-tight drop-shadow-md">
+          <h1 id="hero-banner-title" class="text-2xl sm:text-3xl md:text-5xl font-black tracking-tight leading-tight drop-shadow-md break-words">
             Juntos no Agro
           </h1>
-          <p id="hero-banner-subtitle" class="text-white/90 mt-2 max-w-xl text-sm md:text-base leading-relaxed drop-shadow">
+          <p id="hero-banner-subtitle" class="text-white/90 mt-1.5 sm:mt-2 max-w-xl text-xs sm:text-sm md:text-base leading-relaxed drop-shadow break-words">
             Capacitação, conteúdo técnico e suporte para o setor agropecuário brasileiro.
           </p>
         </div>
       </div>
 
       <!-- REDESIGN INTEGRADO DO HERO / MAPA LEAFLET -->
-      <div class="relative w-full h-[440px] md:h-[480px] rounded-3xl overflow-hidden shadow-lg border border-border">
+      <div class="relative w-full min-h-[350px] h-[400px] sm:h-[440px] md:h-[480px] rounded-3xl overflow-hidden shadow-lg border border-border">
         <!-- Mapa Leaflet Interativo -->
-        <div id="agro-map-container" class="w-full h-full z-0" style="height: 100%; min-height: 400px; width: 100%;"></div>
+        <div id="agro-map-container" class="w-full h-full z-0 min-h-[350px]" style="height: 100%; min-height: 350px; width: 100%;"></div>
 
         <!-- Card de Métricas Flutuando como Overlay sobre o Mapa -->
-        <div id="map-floating-overlay" class="absolute top-4 left-4 z-[500] pointer-events-auto"></div>
+        <div id="map-floating-overlay" class="absolute top-3 left-3 sm:top-4 sm:left-4 z-[500] pointer-events-auto max-w-[calc(100vw-2.5rem)]"></div>
       </div>
 
       <!-- TÍTULO DA SEÇÃO DE CONTEÚDOS & AÇÕES -->
