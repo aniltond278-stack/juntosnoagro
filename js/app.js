@@ -90,14 +90,21 @@ class AppController {
     const openDrawer = () => {
       if (drawerBackdrop && drawerMenu) {
         drawerBackdrop.classList.remove('hidden');
+        drawerMenu.classList.remove('hidden');
         drawerMenu.classList.add('drawer-open');
+        const theme = this.currentTheme || document.documentElement.getAttribute('data-theme') || 'light';
+        drawerMenu.style.backgroundColor = theme === 'dark' ? '#0f172a' : '#ffffff';
+        drawerMenu.style.opacity = '1';
+        document.body.style.overflow = 'hidden';
       }
     };
 
     const closeDrawer = () => {
       if (drawerBackdrop && drawerMenu) {
         drawerBackdrop.classList.add('hidden');
+        drawerMenu.classList.add('hidden');
         drawerMenu.classList.remove('drawer-open');
+        document.body.style.overflow = '';
       }
     };
 
@@ -257,6 +264,11 @@ class AppController {
     if (label) label.textContent = theme === 'light' ? 'Claro' : 'Escuro';
     const drawerLabel = document.getElementById('label-drawer-theme');
     if (drawerLabel) drawerLabel.textContent = theme === 'light' ? 'Claro' : 'Escuro';
+    const drawerMenu = document.getElementById('mobile-drawer-menu');
+    if (drawerMenu) {
+      drawerMenu.style.backgroundColor = theme === 'dark' ? '#0f172a' : '#ffffff';
+      drawerMenu.style.opacity = '1';
+    }
   }
 
   applyFontSize(size) {

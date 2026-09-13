@@ -154,53 +154,7 @@
       </div>
     </div>
 
-    <!-- GAVETA LATERAL MOBILE (DRAWER) COM FUNDO SÓLIDO OPACO E BACKDROP ESCURECIDO -->
-    <div id="mobile-drawer-backdrop" class="hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-50 transition-opacity"></div>
-    <div id="mobile-drawer-menu" class="fixed top-0 left-0 bottom-0 w-72 max-w-[85vw] bg-white dark:bg-slate-900 border-r border-border z-50 drawer-enter shadow-2xl flex flex-col p-5 overflow-y-auto">
-      <div class="flex items-center justify-between pb-4 border-b border-border mb-4">
-        <div class="flex items-center gap-2.5 min-w-0">
-          <div class="w-8 h-8 rounded-xl bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-white shadow-sm shrink-0">
-            <i data-lucide="sprout" class="w-4 h-4"></i>
-          </div>
-          <span class="font-extrabold text-sm text-foreground truncate">Juntos no Agro</span>
-        </div>
-        <button id="btn-close-mobile-drawer" class="p-1.5 rounded-lg text-muted-foreground hover:bg-muted transition shrink-0" aria-label="Fechar menu">
-          <i data-lucide="x" class="w-5 h-5"></i>
-        </button>
-      </div>
 
-      <nav class="space-y-1.5 flex-1">
-        <button class="mobile-drawer-nav-btn w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold text-foreground hover:bg-primary/10 hover:text-primary transition text-left" data-tab="conteudo">
-          <i data-lucide="book-open" class="w-4 h-4 text-primary"></i>
-          <span>Biblioteca de Conteúdos</span>
-        </button>
-        <button class="mobile-drawer-nav-btn w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold text-foreground hover:bg-primary/10 hover:text-primary transition text-left" data-tab="duvidas">
-          <i data-lucide="help-circle" class="w-4 h-4 text-primary"></i>
-          <span>Mural de Dúvidas</span>
-        </button>
-        <button class="mobile-drawer-nav-btn w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold text-foreground hover:bg-primary/10 hover:text-primary transition text-left" data-tab="chat">
-          <i data-lucide="message-circle" class="w-4 h-4 text-primary"></i>
-          <span>Chat Privado</span>
-        </button>
-        <button id="mobile-drawer-admin-btn" class="hidden mobile-drawer-nav-btn w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold text-amber-600 dark:text-amber-400 hover:bg-amber-500/10 transition text-left" data-tab="admin">
-          <i data-lucide="sliders" class="w-4 h-4 text-amber-500"></i>
-          <span>Painel de Gestão</span>
-        </button>
-      </nav>
-
-      <div class="pt-4 border-t border-border mt-auto space-y-3">
-        <!-- Alternar Tema no Mobile -->
-        <button id="btn-drawer-toggle-theme" class="w-full flex items-center justify-between px-3 py-2 rounded-xl bg-muted/60 text-foreground text-xs font-semibold hover:bg-muted transition">
-          <span class="flex items-center gap-2">
-            <i data-lucide="moon" class="w-4 h-4 text-primary"></i>
-            <span>Alternar Tema</span>
-          </span>
-          <span id="label-drawer-theme" class="text-muted-foreground font-bold">Claro</span>
-        </button>
-        <div id="mobile-drawer-auth-area"></div>
-        <p class="text-[10px] text-muted-foreground text-center">© 2026 Juntos no Agro</p>
-      </div>
-    </div>
 
     <!-- Navegação Mobile Inferior Fixa Touch -->
     <div class="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-card/95 backdrop-blur-md border-t border-border px-2 py-1.5 flex items-center justify-around shadow-lg">
@@ -569,6 +523,75 @@
       </div>
     </div>
   </footer>
+
+  <!-- =======================================================================
+       MENU MOBILE / DRAWER TOTALMENTE SÓLIDO (SEM TRANSPARÊNCIA, Z-INDEX 9999)
+       ======================================================================= -->
+  <div id="mobile-drawer-backdrop" class="hidden fixed inset-0 bg-black z-[9998] transition-opacity" style="position: fixed; inset: 0; background-color: #000000; opacity: 0.5; z-index: 9998;"></div>
+  
+  <div id="mobile-drawer-menu" class="hidden fixed inset-0 w-full h-full bg-white dark:bg-slate-900 border-none z-[9999] shadow-2xl flex flex-col p-6 overflow-y-auto" style="position: fixed; inset: 0; width: 100%; height: 100%; background-color: #ffffff; opacity: 1; z-index: 9999;">
+    <!-- Topo do Menu -->
+    <div class="flex items-center justify-between pb-4 border-b border-border mb-6 shrink-0">
+      <div class="flex items-center gap-3 min-w-0">
+        <div class="w-10 h-10 rounded-2xl bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-white shadow-md shadow-primary/20 shrink-0">
+          <i data-lucide="sprout" class="w-5 h-5"></i>
+        </div>
+        <div class="leading-tight min-w-0">
+          <span class="font-extrabold text-base text-foreground truncate block">Juntos no Agro</span>
+          <span class="text-xs text-muted-foreground font-medium block">Menu Principal</span>
+        </div>
+      </div>
+      <button id="btn-close-mobile-drawer" class="p-2.5 rounded-2xl bg-muted/60 text-foreground hover:bg-muted transition shrink-0" aria-label="Fechar menu">
+        <i data-lucide="x" class="w-6 h-6"></i>
+      </button>
+    </div>
+
+    <!-- Links de Navegação Verticais -->
+    <nav class="space-y-2.5 flex-1">
+      <button class="mobile-drawer-nav-btn w-full flex items-center gap-3.5 px-4 py-3.5 rounded-2xl text-sm font-bold text-foreground hover:bg-primary/10 hover:text-primary transition text-left" data-tab="conteudo">
+        <div class="w-8 h-8 rounded-xl bg-primary/10 flex items-center justify-center text-primary shrink-0">
+          <i data-lucide="book-open" class="w-4 h-4"></i>
+        </div>
+        <span>Biblioteca de Conteúdos</span>
+      </button>
+
+      <button class="mobile-drawer-nav-btn w-full flex items-center gap-3.5 px-4 py-3.5 rounded-2xl text-sm font-bold text-foreground hover:bg-primary/10 hover:text-primary transition text-left" data-tab="duvidas">
+        <div class="w-8 h-8 rounded-xl bg-primary/10 flex items-center justify-center text-primary shrink-0">
+          <i data-lucide="help-circle" class="w-4 h-4"></i>
+        </div>
+        <span>Mural de Dúvidas</span>
+      </button>
+
+      <button class="mobile-drawer-nav-btn w-full flex items-center gap-3.5 px-4 py-3.5 rounded-2xl text-sm font-bold text-foreground hover:bg-primary/10 hover:text-primary transition text-left" data-tab="chat">
+        <div class="w-8 h-8 rounded-xl bg-primary/10 flex items-center justify-center text-primary shrink-0">
+          <i data-lucide="message-circle" class="w-4 h-4"></i>
+        </div>
+        <span>Chat Privado</span>
+      </button>
+
+      <button id="mobile-drawer-admin-btn" class="hidden mobile-drawer-nav-btn w-full flex items-center gap-3.5 px-4 py-3.5 rounded-2xl text-sm font-bold text-amber-600 dark:text-amber-400 hover:bg-amber-500/10 transition text-left" data-tab="admin">
+        <div class="w-8 h-8 rounded-xl bg-amber-500/15 flex items-center justify-center text-amber-600 shrink-0">
+          <i data-lucide="sliders" class="w-4 h-4"></i>
+        </div>
+        <span>Painel de Gestão (Admin)</span>
+      </button>
+    </nav>
+
+    <!-- Rodapé do Menu com Tema e Autenticação -->
+    <div class="pt-6 border-t border-border mt-auto space-y-3.5 shrink-0">
+      <!-- Alternar Tema no Mobile -->
+      <button id="btn-drawer-toggle-theme" class="w-full flex items-center justify-between px-4 py-3 rounded-2xl bg-muted/60 text-foreground text-xs font-bold hover:bg-muted transition">
+        <span class="flex items-center gap-2.5">
+          <i data-lucide="moon" class="w-4 h-4 text-primary"></i>
+          <span>Alternar Tema Noturno/Claro</span>
+        </span>
+        <span id="label-drawer-theme" class="text-muted-foreground font-extrabold uppercase text-[11px]">Claro</span>
+      </button>
+
+      <div id="mobile-drawer-auth-area"></div>
+      <p class="text-[11px] text-muted-foreground text-center">© 2026 Juntos no Agro</p>
+    </div>
+  </div>
 
 
   <!-- =======================================================================
