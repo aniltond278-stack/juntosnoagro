@@ -1,0 +1,864 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Juntos no Agro · Capacitação Agropecuária</title>
+  
+  <!-- Favicon -->
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%231B5E20'><path d='M12 2L4.5 20.29l.71.71L12 18l6.79 3 .71-.71z'/></svg>" />
+
+  <!-- Google Fonts: Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+
+  <!-- Tailwind CSS via CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: ['class', '[data-theme="dark"]'],
+      theme: {
+        extend: {
+          colors: {
+            primary: {
+              DEFAULT: '#1B5E20',
+              hover: '#144919',
+              light: '#E8F5E9'
+            },
+            secondary: {
+              DEFAULT: '#2E7D32',
+              light: '#C8E6C9'
+            },
+            accent: {
+              DEFAULT: '#F57F17',
+              hover: '#E65100',
+              light: '#FFF8E1'
+            },
+            background: 'var(--bg-main)',
+            card: 'var(--bg-card)',
+            foreground: 'var(--text-main)',
+            muted: {
+              DEFAULT: 'var(--border-subtle)',
+              foreground: 'var(--text-muted)'
+            },
+            border: 'var(--border-color)'
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Leaflet CSS & JS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <!-- Chart.js para Métricas Analíticas -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <!-- Estilos Personalizados e Animações -->
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body class="bg-background text-foreground antialiased selection:bg-emerald-200 selection:text-emerald-950">
+
+  <!-- =======================================================================
+       1. CABEÇALHO PRINCIPAL (HEADER)
+       ======================================================================= -->
+  <header class="sticky top-0 z-50 bg-card/85 backdrop-blur-md border-b border-border transition-colors">
+    <div class="max-w-7xl mx-auto px-4 md:px-6 h-16 flex items-center justify-between gap-4">
+      
+      <!-- Logo e Nome do Projeto (Editável) -->
+      <div class="flex items-center gap-3 cursor-pointer" onclick="window.app && window.app.switchTab('conteudo')">
+        <div class="w-10 h-10 rounded-2xl bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-white shadow-md shadow-primary/20 shrink-0">
+          <i data-lucide="sprout" class="w-5 h-5"></i>
+        </div>
+        <div class="leading-tight">
+          <span id="header-project-name" class="font-extrabold text-base md:text-lg block tracking-tight text-foreground">
+            Juntos no Agro
+          </span>
+          <span id="header-slogan" class="text-[11px] text-muted-foreground font-medium block">
+            Capacitação Agropecuária
+          </span>
+        </div>
+      </div>
+
+      <!-- Navegação Central por Abas -->
+      <nav class="hidden md:flex items-center gap-1.5 bg-muted/60 p-1 rounded-2xl border border-border/80">
+        <button class="nav-tab-btn flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all bg-card text-primary shadow-sm" data-tab="conteudo">
+          <i data-lucide="book-open" class="w-4 h-4"></i>
+          <span>Conteúdos</span>
+        </button>
+
+        <button class="nav-tab-btn flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all text-muted-foreground hover:text-foreground" data-tab="duvidas">
+          <i data-lucide="help-circle" class="w-4 h-4"></i>
+          <span>Mural de Dúvidas</span>
+        </button>
+
+        <button class="nav-tab-btn flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all text-muted-foreground hover:text-foreground" data-tab="chat">
+          <i data-lucide="message-circle" class="w-4 h-4"></i>
+          <span>Chat Privado</span>
+        </button>
+
+        <!-- Aba de Gestão (Visível apenas para Admin autenticado) -->
+        <button id="nav-tab-admin-item" class="nav-tab-btn hidden flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all text-muted-foreground hover:text-foreground" data-tab="admin">
+          <i data-lucide="sliders" class="w-4 h-4 text-amber-500"></i>
+          <span>Painel de Gestão</span>
+        </button>
+      </nav>
+
+      <!-- Ações da Direita: Autenticação + Preferências -->
+      <div class="flex items-center gap-2">
+        <!-- Controle de Autenticação Dinâmico (Admin vs Visitante) -->
+        <div id="header-auth-controls"></div>
+
+        <!-- Menu de Preferências (Tema e Fonte) -->
+        <div class="relative">
+          <button id="btn-preferences-toggle" class="p-2 rounded-xl text-muted-foreground hover:bg-muted hover:text-foreground transition" title="Acessibilidade e Tema">
+            <i data-lucide="settings" class="w-4 h-4"></i>
+          </button>
+
+          <div id="preferences-dropdown" class="hidden absolute right-0 mt-2 w-64 bg-card border border-border rounded-2xl shadow-xl p-3 z-50 animate-in-fade text-xs space-y-3">
+            <div class="flex items-center justify-between border-b border-border pb-2">
+              <span class="font-bold text-foreground">Acessibilidade</span>
+              <span class="text-[10px] text-muted-foreground uppercase tracking-wider">Ajustes</span>
+            </div>
+
+            <!-- Alternar Tema -->
+            <button id="btn-toggle-theme" class="w-full flex items-center justify-between px-3 py-2 rounded-xl hover:bg-muted transition text-foreground">
+              <span class="flex items-center gap-2">
+                <i data-lucide="moon" class="w-4 h-4 text-primary"></i>
+                <span>Tema</span>
+              </span>
+              <span id="label-current-theme" class="text-muted-foreground font-semibold">Claro</span>
+            </button>
+
+            <!-- Tamanho da Fonte -->
+            <div class="px-3 py-1">
+              <span class="text-muted-foreground font-medium block mb-1.5">Tamanho do Texto</span>
+              <div class="grid grid-cols-3 gap-1 bg-muted p-1 rounded-xl">
+                <button id="btn-font-sm" class="py-1 rounded-lg text-center hover:bg-card text-foreground transition font-medium">A-</button>
+                <button id="btn-font-md" class="py-1 rounded-lg text-center bg-card text-primary font-bold shadow-xs transition">A</button>
+                <button id="btn-font-lg" class="py-1 rounded-lg text-center hover:bg-card text-foreground transition font-medium">A+</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- Botão Hambúrguer Mobile -->
+        <button id="btn-mobile-menu-toggle" class="md:hidden p-2 rounded-xl text-muted-foreground hover:bg-muted hover:text-foreground transition" aria-label="Abrir Menu Lateral">
+          <i data-lucide="menu" class="w-5 h-5"></i>
+        </button>
+      </div>
+    </div>
+
+    <!-- GAVETA LATERAL MOBILE (DRAWER) -->
+    <div id="mobile-drawer-backdrop" class="hidden fixed inset-0 bg-black/60 backdrop-blur-xs z-[200] transition-opacity"></div>
+    <div id="mobile-drawer-menu" class="fixed top-0 left-0 bottom-0 w-72 max-w-[85vw] bg-card border-r border-border z-[201] drawer-enter shadow-2xl flex flex-col p-5 overflow-y-auto">
+      <div class="flex items-center justify-between pb-4 border-b border-border mb-4">
+        <div class="flex items-center gap-2.5">
+          <div class="w-8 h-8 rounded-xl bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-white shadow-sm">
+            <i data-lucide="sprout" class="w-4 h-4"></i>
+          </div>
+          <span class="font-extrabold text-sm text-foreground">Juntos no Agro</span>
+        </div>
+        <button id="btn-close-mobile-drawer" class="p-1.5 rounded-lg text-muted-foreground hover:bg-muted transition" aria-label="Fechar menu">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <nav class="space-y-1.5 flex-1">
+        <button class="mobile-drawer-nav-btn w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold text-foreground hover:bg-primary/10 hover:text-primary transition text-left" data-tab="conteudo">
+          <i data-lucide="book-open" class="w-4 h-4 text-primary"></i>
+          <span>Biblioteca de Conteúdos</span>
+        </button>
+        <button class="mobile-drawer-nav-btn w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold text-foreground hover:bg-primary/10 hover:text-primary transition text-left" data-tab="duvidas">
+          <i data-lucide="help-circle" class="w-4 h-4 text-primary"></i>
+          <span>Mural de Dúvidas</span>
+        </button>
+        <button class="mobile-drawer-nav-btn w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold text-foreground hover:bg-primary/10 hover:text-primary transition text-left" data-tab="chat">
+          <i data-lucide="message-circle" class="w-4 h-4 text-primary"></i>
+          <span>Chat com Especialista</span>
+        </button>
+        <button id="mobile-drawer-admin-btn" class="hidden mobile-drawer-nav-btn w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold text-amber-600 dark:text-amber-400 hover:bg-amber-500/10 transition text-left" data-tab="admin">
+          <i data-lucide="sliders" class="w-4 h-4 text-amber-500"></i>
+          <span>Painel de Gestão</span>
+        </button>
+      </nav>
+
+      <div class="pt-4 border-t border-border mt-auto space-y-3">
+        <div id="mobile-drawer-auth-area"></div>
+        <p class="text-[10px] text-muted-foreground text-center">© 2026 Juntos no Agro</p>
+      </div>
+    </div>
+
+    <!-- Navegação Mobile Inferior Fixa Touch -->
+    <div class="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-card/95 backdrop-blur-md border-t border-border px-2 py-1.5 flex items-center justify-around shadow-lg">
+      <button class="nav-tab-btn flex flex-col items-center py-1 px-3 text-primary touch-target" data-tab="conteudo">
+        <i data-lucide="book-open" class="w-5 h-5"></i>
+        <span class="text-[10px] mt-0.5 font-medium">Conteúdos</span>
+      </button>
+      <button class="nav-tab-btn flex flex-col items-center py-1 px-3 text-muted-foreground touch-target" data-tab="duvidas">
+        <i data-lucide="help-circle" class="w-5 h-5"></i>
+        <span class="text-[10px] mt-0.5 font-medium">Dúvidas</span>
+      </button>
+      <button class="nav-tab-btn flex flex-col items-center py-1 px-3 text-muted-foreground touch-target" data-tab="chat">
+        <i data-lucide="message-circle" class="w-5 h-5"></i>
+        <span class="text-[10px] mt-0.5 font-medium">Chat</span>
+      </button>
+      <button id="mobile-bottom-admin-btn" class="hidden nav-tab-btn flex flex-col items-center py-1 px-3 text-amber-600 touch-target" data-tab="admin">
+        <i data-lucide="sliders" class="w-5 h-5"></i>
+        <span class="text-[10px] mt-0.5 font-medium">Painel</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- =======================================================================
+       2. CONTEÚDO PRINCIPAL (MAIN CONTAINER)
+       ======================================================================= -->
+  <main class="max-w-7xl mx-auto px-4 md:px-6 py-6 pb-24 md:pb-8 min-h-[calc(100vh-140px)]">
+
+    <!-- =====================================================================
+         ABA 1: CONTEÚDOS TÉCNICOS & MAPA HERO
+         ===================================================================== -->
+    <section id="tab-content-conteudo" class="space-y-8 animate-in-fade">
+
+      <!-- BANNER HERO SUPERIOR -->
+      <div class="relative rounded-3xl overflow-hidden shadow-lg h-48 md:h-60 border border-border">
+        <img 
+          src="https://media.base44.com/images/public/6aa5dda7dffe8d7aff83f886/73f734e12_generated_image.png" 
+          alt="Juntos no Agro" 
+          class="absolute inset-0 w-full h-full object-cover" 
+        />
+        <div class="absolute inset-0 bg-gradient-to-r from-emerald-950/90 via-emerald-900/65 to-transparent flex flex-col justify-center px-6 md:px-12 text-white">
+          <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/15 backdrop-blur-md text-xs font-semibold w-fit mb-2 border border-white/20">
+            <i data-lucide="shield-check" class="w-3.5 h-3.5 text-yellow-300"></i>
+            Plataforma 100% Segura & Atualizada
+          </div>
+          <h1 id="hero-banner-title" class="text-3xl md:text-5xl font-black tracking-tight drop-shadow-md">
+            Juntos no Agro
+          </h1>
+          <p id="hero-banner-subtitle" class="text-white/90 mt-2 max-w-xl text-sm md:text-base leading-relaxed drop-shadow">
+            Capacitação, conteúdo técnico e suporte para o setor agropecuário brasileiro.
+          </p>
+        </div>
+      </div>
+
+      <!-- REDESIGN INTEGRADO DO HERO / MAPA LEAFLET -->
+      <div class="relative w-full h-[440px] md:h-[480px] rounded-3xl overflow-hidden shadow-lg border border-border">
+        <!-- Mapa Leaflet Interativo -->
+        <div id="agro-map-container" class="w-full h-full z-0"></div>
+
+        <!-- Card de Métricas Flutuando como Overlay sobre o Mapa -->
+        <div id="map-floating-overlay" class="absolute top-4 left-4 z-[500] pointer-events-auto"></div>
+      </div>
+
+      <!-- TÍTULO DA SEÇÃO DE CONTEÚDOS & AÇÕES -->
+      <div class="flex flex-wrap items-center justify-between gap-4 pt-2">
+        <div>
+          <h2 class="text-2xl font-black text-foreground tracking-tight">Conteúdo Técnico Agropecuário</h2>
+          <p class="text-xs md:text-sm text-muted-foreground mt-0.5">Videoaulas, artigos técnicos, manuais práticos e guias em PDF.</p>
+        </div>
+      </div>
+
+      <!-- SEÇÃO: CONTEÚDOS EM DESTAQUE (BORDA DOURADA & SELO DE ESPECIALISTA) -->
+      <section class="space-y-3.5">
+        <div class="flex items-center justify-between">
+          <h3 class="flex items-center gap-2 text-lg font-bold text-foreground">
+            <i data-lucide="star" class="w-5 h-5 text-amber-500 fill-amber-500"></i>
+            <span>Conteúdos em Destaque</span>
+          </h3>
+          <span class="text-xs text-muted-foreground font-medium">Recomendados pelo Especialista</span>
+        </div>
+
+        <div id="featured-contents-container" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5"></div>
+      </section>
+
+      <!-- SEÇÃO: ADICIONADOS RECENTEMENTE -->
+      <section class="space-y-3.5 pt-4">
+        <h3 class="flex items-center gap-2 text-lg font-bold text-foreground">
+          <i data-lucide="clock" class="w-5 h-5 text-primary"></i>
+          <span>Adicionados Recentemente</span>
+        </h3>
+
+        <div id="recent-contents-container" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5"></div>
+      </section>
+
+      <!-- SEÇÃO: EXPLORAR TODOS OS CONTEÚDOS (CORREÇÃO DE FILTRO & BUSCA) -->
+      <section class="space-y-4 pt-6 border-t border-border">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <h3 class="flex items-center gap-2 text-lg font-bold text-foreground">
+            <i data-lucide="layout-grid" class="w-5 h-5 text-primary"></i>
+            <span>Explorar Todos os Conteúdos</span>
+          </h3>
+
+          <!-- Filtro Inteligente: Busca por Palavra-Chave + Dropdown de Categorias -->
+          <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 flex-1 max-w-xl justify-end">
+            <!-- Barra de Busca -->
+            <div class="relative flex-1">
+              <i data-lucide="search" class="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground"></i>
+              <input 
+                type="text" 
+                id="content-search-input" 
+                placeholder="Buscar por título, manejo ou palavra-chave..." 
+                class="w-full h-10 pl-10 pr-4 rounded-xl border border-input bg-card text-xs focus:outline-none focus:ring-2 focus:ring-primary shadow-xs transition"
+              />
+            </div>
+
+            <!-- Filtro por Categoria -->
+            <select 
+              id="content-category-filter" 
+              class="h-10 px-3.5 rounded-xl border border-input bg-card text-xs font-medium focus:outline-none focus:ring-2 focus:ring-primary shadow-xs transition shrink-0"
+            ></select>
+          </div>
+        </div>
+
+        <!-- Grade de Conteúdos da Busca (Exibe TODOS por padrão) -->
+        <div id="explore-contents-container" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5"></div>
+
+        <!-- Mensagem de Nenhum Resultado Encontrado (Apenas quando a busca falhar) -->
+        <div id="explore-empty-message" class="hidden"></div>
+      </section>
+    </section>
+
+
+    <!-- =====================================================================
+         ABA 2: MURAL DE DÚVIDAS (KANBAN)
+         ===================================================================== -->
+    <section id="tab-content-duvidas" class="hidden space-y-6 animate-in-fade">
+      <div class="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h2 class="text-2xl font-black text-foreground tracking-tight">Mural de Dúvidas</h2>
+          <p class="text-xs md:text-sm text-muted-foreground mt-0.5">Espaço aberto de suporte agronômico. Envie sua pergunta e acompanhe a resolução.</p>
+        </div>
+
+        <!-- Botão + Nova Dúvida (Acessível a todos os visitantes e produtores) -->
+        <button id="btn-open-new-doubt" class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold bg-primary text-white hover:bg-primary-hover shadow-md shadow-primary/20 transition">
+          <i data-lucide="plus-circle" class="w-4 h-4"></i>
+          <span>+ Nova Dúvida</span>
+        </button>
+      </div>
+
+      <!-- Quadro Kanban das Dúvidas -->
+      <div id="doubts-kanban-board"></div>
+    </section>
+
+
+    <!-- =====================================================================
+         ABA 3: CHAT PRIVADO (SUPORTE 1:1)
+         ===================================================================== -->
+    <section id="tab-content-chat" class="hidden space-y-4 animate-in-fade">
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 class="text-2xl font-black text-foreground tracking-tight">Chat Privado · Suporte 1:1</h2>
+          <p id="chat-visitor-notice" class="text-xs md:text-sm text-muted-foreground mt-0.5"></p>
+        </div>
+
+        <!-- Indicador de Papel de Acesso Seguro (Protegido por RBAC) -->
+        <div id="chat-role-indicator"></div>
+      </div>
+
+      <!-- Painel Central do Chat -->
+      <div class="bg-card rounded-3xl border border-border shadow-md overflow-hidden flex h-[580px]">
+        
+        <!-- Barra Lateral de Conversas (Visível exclusivamente para Administrador autenticado) -->
+        <aside id="chat-admin-sidebar" class="hidden w-64 border-r border-border bg-muted/20 flex flex-col shrink-0">
+          <div class="p-3.5 border-b border-border bg-muted/40 flex items-center justify-between">
+            <span class="font-bold text-xs text-foreground uppercase tracking-wider">Produtores Ativos</span>
+            <i data-lucide="users" class="w-4 h-4 text-muted-foreground"></i>
+          </div>
+          <div id="chat-conversations-list" class="flex-1 overflow-y-auto divide-y divide-border/60 scrollbar-thin"></div>
+        </aside>
+
+        <!-- Área Central de Mensagens -->
+        <div id="chat-messages-panel" class="flex-1 flex flex-col min-w-0 bg-background/50">
+          <!-- Histórico de Mensagens -->
+          <div id="chat-messages-container" class="flex-1 overflow-y-auto p-4 md:p-6 space-y-3.5 scrollbar-thin"></div>
+
+          <!-- Barra de Entrada e Envio de Mensagens -->
+          <div class="p-3.5 border-t border-border bg-card flex items-center gap-2">
+            <!-- Anexar Arquivo Seguro (Fotos, Vídeos, Documentos) -->
+            <label class="p-2 rounded-xl text-muted-foreground hover:bg-muted hover:text-foreground cursor-pointer transition" title="Anexar foto ou documento seguro">
+              <i data-lucide="paperclip" class="w-5 h-5"></i>
+              <input type="file" id="chat-file-input" class="hidden" accept=".png,.jpg,.jpeg,.webp,.mp4,.pdf" />
+            </label>
+
+            <!-- Gravar Mensagem de Áudio -->
+            <button type="button" id="btn-record-audio" class="p-2 rounded-xl text-muted-foreground hover:bg-muted hover:text-foreground transition" title="Gravar áudio com microfone">
+              <i data-lucide="mic" class="w-5 h-5"></i>
+            </button>
+
+            <!-- Campo de Texto -->
+            <input 
+              type="text" 
+              id="chat-msg-input" 
+              placeholder="Digite sua mensagem para o especialista..." 
+              class="flex-1 h-11 px-4 rounded-xl bg-muted/60 border border-border text-xs focus:outline-none focus:ring-2 focus:ring-primary shadow-xs transition"
+            />
+
+            <!-- Botão Enviar -->
+            <button type="button" id="btn-send-chat-msg" class="w-11 h-11 rounded-xl bg-primary text-white hover:bg-primary-hover flex items-center justify-center shadow-md shadow-primary/20 transition shrink-0" title="Enviar mensagem">
+              <i data-lucide="send" class="w-4 h-4"></i>
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+
+    <!-- =====================================================================
+         ABA 4: PAINEL DE GESTÃO (ADMINISTRADOR)
+         ===================================================================== -->
+    <section id="tab-content-admin" class="hidden space-y-6 animate-in-fade">
+      <div class="flex items-center justify-between">
+        <div>
+          <h2 class="text-2xl font-black text-foreground tracking-tight">Painel de Gestão & Edite-Tudo</h2>
+          <p class="text-xs md:text-sm text-muted-foreground mt-0.5">Visão analítica em tempo real e controle integral da plataforma.</p>
+        </div>
+      </div>
+
+      <!-- 4 Cards de KPIs em Tempo Real -->
+      <div id="admin-kpis-container"></div>
+
+      <!-- Botões de Ação Rápida no Topo (+ Categoria e + Conteúdo) -->
+      <div id="admin-quick-actions-top"></div>
+
+      <!-- Gráficos Analíticos -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        <div class="bg-card rounded-2xl border border-border p-5 shadow-sm">
+          <div class="flex items-center gap-2 mb-3">
+            <i data-lucide="trending-up" class="w-4 h-4 text-primary"></i>
+            <h3 class="font-bold text-sm text-foreground">Temas de Conteúdo Mais Acessados</h3>
+          </div>
+          <div class="h-60">
+            <canvas id="chart-themes-canvas"></canvas>
+          </div>
+        </div>
+
+        <div class="bg-card rounded-2xl border border-border p-5 shadow-sm">
+          <div class="flex items-center gap-2 mb-3">
+            <i data-lucide="pie-chart" class="w-4 h-4 text-amber-500"></i>
+            <h3 class="font-bold text-sm text-foreground">Dúvidas Enviadas por Categoria</h3>
+          </div>
+          <div class="h-60">
+            <canvas id="chart-doubts-canvas"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- Gerenciador de Categorias & Formulário Edite-Tudo Institucional -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        <div id="admin-categories-manager"></div>
+        <div id="admin-settings-form-container"></div>
+      </div>
+    </section>
+  </main>
+
+
+  <!-- =======================================================================
+       3. RODAPÉ INSTITUCIONAL PROFISSIONAL EM 3 COLUNAS
+       ======================================================================= -->
+  <footer class="bg-card border-t border-border mt-16 pt-12 pb-6 text-foreground transition-colors">
+    <div class="max-w-7xl mx-auto px-4 md:px-6">
+      
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-10 pb-10 border-b border-border/80">
+        
+        <!-- Coluna 1: Sobre a Plataforma -->
+        <div class="space-y-4">
+          <div class="flex items-center gap-3">
+            <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-white shadow-sm">
+              <i data-lucide="sprout" class="w-5 h-5"></i>
+            </div>
+            <span id="footer-about-title" class="font-black text-lg tracking-tight text-foreground">
+              Juntos no Agro
+            </span>
+          </div>
+          <p id="footer-about-text" class="text-xs text-muted-foreground leading-relaxed">
+            Plataforma dedicada à capacitação técnica, difusão de conhecimento agronômico de ponta e suporte direto ao produtor rural em todas as regiões produtivas do Brasil.
+          </p>
+          <div class="flex items-center gap-2 text-xs font-semibold text-primary">
+            <i data-lucide="shield-check" class="w-4 h-4"></i>
+            <span>Ambiente 100% Protegido</span>
+          </div>
+        </div>
+
+        <!-- Coluna 2: Canais Oficiais & Redes Sociais -->
+        <div class="space-y-3.5">
+          <h4 class="font-bold text-sm text-foreground uppercase tracking-wider">Canais & Redes Sociais</h4>
+          <ul class="space-y-2.5 text-xs text-muted-foreground">
+            <!-- Instagram Oficial -->
+            <li>
+              <a id="footer-instagram" href="https://instagram.com/juntosnoagro" target="_blank" rel="noopener" class="inline-flex items-center gap-2 hover:text-primary transition">
+                <i data-lucide="instagram" class="w-4 h-4 text-pink-600"></i>
+                <span>@juntosnoagro</span>
+              </a>
+            </li>
+
+            <!-- E-mail Oficial -->
+            <li>
+              <a id="footer-email" href="mailto:contato@juntosnoagro.com.br" class="inline-flex items-center gap-2 hover:text-primary transition">
+                <i data-lucide="mail" class="w-4 h-4 text-primary"></i>
+                <span>contato@juntosnoagro.com.br</span>
+              </a>
+            </li>
+
+            <!-- WhatsApp de Atendimento/Suporte -->
+            <li class="pt-1">
+              <a id="footer-whatsapp-link" href="https://wa.me/5588981171939" target="_blank" rel="noopener" class="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 transition font-semibold shadow-sm shadow-emerald-600/20">
+                <i data-lucide="message-square" class="w-4 h-4"></i>
+                <span>WhatsApp: <span id="footer-phone">(88) 98117-1939</span></span>
+              </a>
+            </li>
+          </ul>
+        </div>
+
+        <!-- Coluna 3: Navegação Rápida -->
+        <div class="space-y-3.5">
+          <h4 class="font-bold text-sm text-foreground uppercase tracking-wider">Navegação</h4>
+          <ul class="space-y-2 text-xs text-muted-foreground">
+            <li>
+              <a href="#" class="footer-nav-link hover:text-primary transition flex items-center gap-1.5" data-tab="conteudo">
+                <i data-lucide="chevron-right" class="w-3 h-3 text-primary"></i>
+                <span>Biblioteca de Conteúdos</span>
+              </a>
+            </li>
+            <li>
+              <a href="#" class="footer-nav-link hover:text-primary transition flex items-center gap-1.5" data-tab="duvidas">
+                <i data-lucide="chevron-right" class="w-3 h-3 text-primary"></i>
+                <span>Mural de Dúvidas Técnicas</span>
+              </a>
+            </li>
+            <li>
+              <a href="#" class="footer-nav-link hover:text-primary transition flex items-center gap-1.5" data-tab="chat">
+                <i data-lucide="chevron-right" class="w-3 h-3 text-primary"></i>
+                <span>Chat com o Especialista</span>
+              </a>
+            </li>
+            <li>
+              <a href="#" class="footer-nav-link hover:text-primary transition flex items-center gap-1.5" data-tab="admin">
+                <i data-lucide="chevron-right" class="w-3 h-3 text-primary"></i>
+                <span>Painel de Gestão Administrativa</span>
+              </a>
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- Barra de Direitos Autorais Inferior -->
+      <div class="pt-6 flex flex-col sm:flex-row items-center justify-between text-xs text-muted-foreground gap-2">
+        <p>© 2026 Juntos no Agro. Todos os direitos reservados.</p>
+        <p class="text-[11px]">Desenvolvido com excelência em segurança e usabilidade agronômica.</p>
+      </div>
+    </div>
+  </footer>
+
+
+  <!-- =======================================================================
+       4. MODAIS DO SISTEMA
+       ======================================================================= -->
+
+  <!-- MODAL DE AUTENTICAÇÃO / LOGIN ADMIN -->
+  <div id="modal-auth-login" class="hidden fixed inset-0 z-[1000] flex items-center justify-center p-4">
+    <div class="modal-backdrop absolute inset-0"></div>
+    <div class="relative w-full max-w-md bg-card rounded-3xl shadow-2xl border border-border p-6 animate-in-fade z-10">
+      <div class="flex items-center justify-between pb-3 border-b border-border mb-4">
+        <div class="flex items-center gap-2 text-primary font-bold text-base">
+          <i data-lucide="shield-check" class="w-5 h-5"></i>
+          <span>Acesso do Administrador</span>
+        </div>
+        <button id="btn-close-auth-modal" class="p-1 rounded-lg text-muted-foreground hover:bg-muted transition">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div id="auth-error-msg" class="hidden mb-4 p-3 rounded-xl bg-red-50 text-red-700 text-xs border border-red-200"></div>
+
+      <form id="form-auth-login" class="space-y-4 text-xs">
+        <div>
+          <label class="font-semibold block mb-1">E-mail do Administrador</label>
+          <input 
+            type="email" 
+            id="auth-email" 
+            value="admin@juntosnoagro.com.br" 
+            required 
+            class="w-full h-10 px-3.5 rounded-xl border border-input bg-background focus:ring-2 focus:ring-primary focus:outline-none"
+          />
+        </div>
+
+        <div>
+          <label class="font-semibold block mb-1">Senha de Acesso</label>
+          <div class="relative">
+            <input 
+              type="password" 
+              id="auth-password" 
+              placeholder="Digite sua senha" 
+              required 
+              class="w-full h-10 pl-3.5 pr-10 rounded-xl border border-input bg-background text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+            />
+            <button type="button" id="btn-toggle-password-vis" class="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground p-1" title="Mostrar/ocultar senha">
+              <i data-lucide="eye" class="w-4 h-4"></i>
+            </button>
+          </div>
+        </div>
+
+        <div class="flex items-center justify-between pt-1">
+          <label class="flex items-center gap-2 cursor-pointer select-none">
+            <input type="checkbox" id="auth-remember" class="w-4 h-4 rounded text-primary focus:ring-primary" checked />
+            <span class="text-muted-foreground">Manter conectado por 8h</span>
+          </label>
+        </div>
+
+        <div class="pt-2">
+          <button type="submit" class="w-full h-10 rounded-xl bg-primary text-white font-bold hover:bg-primary-hover shadow-md shadow-primary/20 transition">
+            Entrar no Painel Seguro
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+
+  <!-- MODAL DE CONTEÚDO (ADICIONAR / EDITAR) COM UPLOAD DE FOTO DO COMPUTADOR -->
+  <div id="modal-content-editor" class="hidden fixed inset-0 z-[1000] flex items-center justify-center p-4">
+    <div class="modal-backdrop absolute inset-0"></div>
+    <div class="relative w-full max-w-xl bg-card rounded-3xl shadow-2xl border border-border p-6 animate-in-fade z-10 max-h-[90vh] overflow-y-auto scrollbar-thin">
+      <div class="flex items-center justify-between pb-3 border-b border-border mb-4">
+        <h3 id="modal-content-title" class="font-bold text-base text-foreground">Editar Conteúdo</h3>
+        <button id="btn-close-content-modal" class="p-1 rounded-lg text-muted-foreground hover:bg-muted transition">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <form id="form-content-editor" class="space-y-4 text-xs">
+        <div>
+          <label class="font-semibold block mb-1">Título do Conteúdo *</label>
+          <input type="text" id="content-title" required placeholder="Ex: Manejo de Irrigação por Gotejamento" class="w-full h-10 px-3.5 rounded-xl border border-input bg-background focus:ring-2 focus:ring-primary focus:outline-none" />
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="font-semibold block mb-1">Categoria *</label>
+            <select id="content-category" required class="w-full h-10 px-3 rounded-xl border border-input bg-background focus:ring-2 focus:ring-primary focus:outline-none"></select>
+          </div>
+
+          <div>
+            <label class="font-semibold block mb-1">Formato do Material</label>
+            <select id="content-type" class="w-full h-10 px-3 rounded-xl border border-input bg-background focus:ring-2 focus:ring-primary focus:outline-none">
+              <option value="article">🔬 Artigo Técnico</option>
+              <option value="video">🎥 Videoaula</option>
+              <option value="pdf">📄 Guia PDF</option>
+              <option value="manual">📖 Manual Prático</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="font-semibold block mb-1">Tempo Estimado</label>
+            <input type="text" id="content-reading-time" placeholder="Ex: 15 min ou 10 min de leitura" class="w-full h-10 px-3.5 rounded-xl border border-input bg-background focus:ring-2 focus:ring-primary focus:outline-none" />
+          </div>
+
+          <div>
+            <label class="font-semibold block mb-1">Link / Mídia Externa (URL)</label>
+            <input type="url" id="content-media-url" placeholder="https://..." class="w-full h-10 px-3.5 rounded-xl border border-input bg-background focus:ring-2 focus:ring-primary focus:outline-none" />
+          </div>
+        </div>
+
+        <!-- UPLOAD DE IMAGEM DE CAPA DO COMPUTADOR -->
+        <div>
+          <label class="font-semibold block mb-1">Imagem de Capa (Carregar do Computador)</label>
+          <div class="flex items-center gap-3">
+            <input type="file" id="content-cover-file" accept=".png,.jpg,.jpeg,.webp" class="text-xs file:mr-3 file:py-2 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20 cursor-pointer" />
+            <img id="content-cover-preview" class="hidden w-12 h-12 rounded-xl object-cover border border-border shrink-0" alt="Preview da capa" />
+          </div>
+          <span class="text-[10px] text-muted-foreground mt-1 block">Formatos permitidos: .png, .jpg, .webp (Máx. 6MB)</span>
+        </div>
+
+        <div>
+          <label class="font-semibold block mb-1">Descrição Resumida</label>
+          <textarea id="content-description" rows="3" placeholder="Resumo dos objetivos e pontos-chave do material..." class="w-full p-3 rounded-xl border border-input bg-background focus:ring-2 focus:ring-primary focus:outline-none"></textarea>
+        </div>
+
+        <!-- Checkbox Destaque / Recomendado -->
+        <label class="flex items-center gap-2 p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 cursor-pointer select-none">
+          <input type="checkbox" id="content-is-featured" class="w-4 h-4 rounded text-amber-600 focus:ring-amber-500" />
+          <span class="font-semibold text-amber-900 dark:text-amber-200 text-xs">Marcar como Conteúdo em Destaque (Recomendado pelo Especialista com borda dourada)</span>
+        </label>
+
+        <div class="flex items-center justify-end gap-2 pt-2 border-t border-border">
+          <button type="button" id="btn-cancel-content-modal" class="px-4 py-2 rounded-xl border border-border hover:bg-muted font-medium transition">
+            Cancelar
+          </button>
+          <button type="submit" class="px-5 py-2 rounded-xl bg-primary text-white font-bold hover:bg-primary-hover shadow-md shadow-primary/20 transition">
+            Salvar Conteúdo
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+
+  <!-- MODAL DE NOVA CATEGORIA COM UPLOAD DE IMAGEM -->
+  <div id="modal-category-editor" class="hidden fixed inset-0 z-[1000] flex items-center justify-center p-4">
+    <div class="modal-backdrop absolute inset-0"></div>
+    <div class="relative w-full max-w-md bg-card rounded-3xl shadow-2xl border border-border p-6 animate-in-fade z-10">
+      <div class="flex items-center justify-between pb-3 border-b border-border mb-4">
+        <h3 class="font-bold text-base text-foreground">Nova Categoria</h3>
+        <button id="btn-close-cat-modal" class="p-1 rounded-lg text-muted-foreground hover:bg-muted transition">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <form id="form-category-editor" class="space-y-4 text-xs">
+        <div>
+          <label class="font-semibold block mb-1">Nome da Categoria *</label>
+          <input type="text" id="cat-name" required placeholder="Ex: Silagem e Feno" class="w-full h-10 px-3.5 rounded-xl border border-input bg-background focus:ring-2 focus:ring-primary focus:outline-none" />
+        </div>
+
+        <div>
+          <label class="font-semibold block mb-1">Ícone / Emoji</label>
+          <input type="text" id="cat-icon" placeholder="🌱" class="w-full h-10 px-3.5 rounded-xl border border-input bg-background focus:ring-2 focus:ring-primary focus:outline-none" />
+        </div>
+
+        <div>
+          <label class="font-semibold block mb-1">Descrição</label>
+          <textarea id="cat-description" rows="2" placeholder="Breve explicação dos tópicos abordados nesta categoria..." class="w-full p-3 rounded-xl border border-input bg-background focus:ring-2 focus:ring-primary focus:outline-none"></textarea>
+        </div>
+
+        <div>
+          <label class="font-semibold block mb-1">Imagem de Capa Padrão (Upload)</label>
+          <div class="flex items-center gap-3">
+            <input type="file" id="cat-cover-file" accept=".png,.jpg,.jpeg,.webp" class="text-xs file:mr-3 file:py-2 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20 cursor-pointer" />
+            <img id="cat-cover-preview" class="hidden w-12 h-12 rounded-xl object-cover border border-border shrink-0" alt="Preview da categoria" />
+          </div>
+        </div>
+
+        <div class="flex items-center justify-end gap-2 pt-2 border-t border-border">
+          <button type="button" id="btn-cancel-cat-modal" class="px-4 py-2 rounded-xl border border-border hover:bg-muted font-medium transition">
+            Cancelar
+          </button>
+          <button type="submit" class="px-5 py-2 rounded-xl bg-primary text-white font-bold hover:bg-primary-hover shadow-md shadow-primary/20 transition">
+            Criar Categoria
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+
+  <!-- MODAL DE NOVA DÚVIDA (MURAL) COM UPLOAD DE FOTOS E VÍDEOS -->
+  <div id="modal-new-doubt" class="hidden fixed inset-0 z-[1000] flex items-center justify-center p-4">
+    <div class="modal-backdrop absolute inset-0"></div>
+    <div class="relative w-full max-w-lg bg-card rounded-3xl shadow-2xl border border-border p-6 animate-in-fade z-10 max-h-[90vh] overflow-y-auto scrollbar-thin">
+      <div class="flex items-center justify-between pb-3 border-b border-border mb-4">
+        <h3 class="font-bold text-base text-foreground">Enviar Dúvida Técnica</h3>
+        <button id="btn-close-new-doubt" class="p-1 rounded-lg text-muted-foreground hover:bg-muted transition">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <form id="form-new-doubt" class="space-y-4 text-xs">
+        <div>
+          <label class="font-semibold block mb-1">Seu Nome / Propriedade (Opcional)</label>
+          <input type="text" id="doubt-author" placeholder="Como podemos te chamar? Ex: Marcos (Fazenda Esperança)" class="w-full h-10 px-3.5 rounded-xl border border-input bg-background focus:ring-2 focus:ring-primary focus:outline-none" />
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="font-semibold block mb-1">Título da Dúvida *</label>
+            <input type="text" id="doubt-title" required placeholder="Ex: Amarelecimento nas folhas do milho" class="w-full h-10 px-3.5 rounded-xl border border-input bg-background focus:ring-2 focus:ring-primary focus:outline-none" />
+          </div>
+
+          <div>
+            <label class="font-semibold block mb-1">Categoria Relacionada</label>
+            <select id="doubt-category" class="w-full h-10 px-3 rounded-xl border border-input bg-background focus:ring-2 focus:ring-primary focus:outline-none"></select>
+          </div>
+        </div>
+
+        <div>
+          <label class="font-semibold block mb-1">Descrição Detalhada *</label>
+          <textarea id="doubt-description" rows="4" required placeholder="Explique os sintomas observados, tipo de solo, clima recente e outras informações relevantes..." class="w-full p-3 rounded-xl border border-input bg-background focus:ring-2 focus:ring-primary focus:outline-none"></textarea>
+        </div>
+
+        <!-- UPLOAD DE FOTOS E VÍDEOS COM VALIDAÇÃO SEGURA -->
+        <div>
+          <label class="font-semibold block mb-1.5">Anexar Mídias (Fotos ou Vídeos)</label>
+          <div class="flex items-center gap-2">
+            <label class="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-border hover:bg-muted cursor-pointer transition font-medium">
+              <i data-lucide="image" class="w-4 h-4 text-primary"></i>
+              <span>+ Fotos (.png, .jpg, .webp)</span>
+              <input type="file" id="doubt-file-photos" multiple accept=".png,.jpg,.jpeg,.webp" class="hidden" />
+            </label>
+
+            <label class="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-border hover:bg-muted cursor-pointer transition font-medium">
+              <i data-lucide="video" class="w-4 h-4 text-red-600"></i>
+              <span>+ Vídeos (.mp4)</span>
+              <input type="file" id="doubt-file-videos" multiple accept=".mp4" class="hidden" />
+            </label>
+          </div>
+
+          <div id="doubt-attachments-preview"></div>
+        </div>
+
+        <div class="flex items-center justify-end gap-2 pt-2 border-t border-border">
+          <button type="button" id="btn-cancel-new-doubt" class="px-4 py-2 rounded-xl border border-border hover:bg-muted font-medium transition">
+            Cancelar
+          </button>
+          <button type="submit" class="px-5 py-2 rounded-xl bg-primary text-white font-bold hover:bg-primary-hover shadow-md shadow-primary/20 transition">
+            Publicar no Mural
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+
+  <!-- MODAL DE EDIÇÃO DO MAPA E HERO (ADMIN) -->
+  <div id="modal-hero-map-editor" class="hidden fixed inset-0 z-[1000] flex items-center justify-center p-4">
+    <div class="modal-backdrop absolute inset-0"></div>
+    <div class="relative w-full max-w-lg bg-card rounded-3xl shadow-2xl border border-border p-6 animate-in-fade z-10 max-h-[90vh] overflow-y-auto scrollbar-thin">
+      <div class="flex items-center justify-between pb-3 border-b border-border mb-4">
+        <h3 class="font-bold text-base text-foreground">Editar Hero e Pontos Conectados do Mapa</h3>
+        <button id="btn-close-map-modal" class="p-1 rounded-lg text-muted-foreground hover:bg-muted transition">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <form id="form-hero-map-editor" class="space-y-4 text-xs">
+        <div>
+          <label class="font-semibold block mb-1">Título do Hero (Card Flutuante)</label>
+          <input type="text" id="edit-hero-title" required class="w-full h-10 px-3.5 rounded-xl border border-input bg-background focus:ring-2 focus:ring-primary focus:outline-none" />
+        </div>
+
+        <div>
+          <label class="font-semibold block mb-1">Subtítulo / Descrição da Conexão</label>
+          <textarea id="edit-hero-subtitle" rows="2" class="w-full p-3 rounded-xl border border-input bg-background focus:ring-2 focus:ring-primary focus:outline-none"></textarea>
+        </div>
+
+        <div class="pt-2">
+          <div class="flex items-center justify-between mb-2">
+            <label class="font-semibold block">Locais e Coordenadas Conectadas</label>
+            <button type="button" id="btn-add-new-point" class="text-primary hover:underline font-bold text-xs flex items-center gap-1">
+              <i data-lucide="plus" class="w-3.5 h-3.5"></i> Adicionar Ponto
+            </button>
+          </div>
+          <div id="map-points-editor-list"></div>
+        </div>
+
+        <div class="flex items-center justify-end gap-2 pt-3 border-t border-border">
+          <button type="button" id="btn-cancel-map-modal" class="px-4 py-2 rounded-xl border border-border hover:bg-muted font-medium transition">
+            Fechar
+          </button>
+          <button type="submit" class="px-5 py-2 rounded-xl bg-primary text-white font-bold hover:bg-primary-hover shadow-md shadow-primary/20 transition">
+            Salvar Alterações
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Script Modular Principal -->
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

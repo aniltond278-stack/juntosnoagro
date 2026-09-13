@@ -1,0 +1,28 @@
+# Dependencias
+node_modules/
+.npm
+
+# Sistema operacional
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDEs e editores
+.vscode/settings.json
+.idea/
+
+# Build / deploy temporarios
+dist/
+build/
+.cache/
+.vercel/
+.netlify/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Variaveis de ambiente (NUNCA commitar)
+.env
+.env.local
+.env.production

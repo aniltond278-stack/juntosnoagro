@@ -1,0 +1,15 @@
+{
+  "name": "juntos-no-agro",
+  "version": "1.0.0",
+  "description": "Portal colaborativo para o agronegocio brasileiro - seguro, responsivo e editavel pelo Administrador.",
+  "private": true,
+  "scripts": {
+    "dev": "npx serve . --cors -l 8080",
+    "build": "node -e \"console.log('Build estatico concluido com sucesso.')\"",
+    "start": "npx serve . --cors -l 8080",
+    "preview": "npx serve . --cors -l 4173"
+  },
+  "keywords": ["agro", "portal", "brasil", "produtores"],
+  "author": "Juntos no Agro",
+  "license": "UNLICENSED"
+}
