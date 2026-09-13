@@ -29,6 +29,7 @@ class AppController {
     this.applyFontSize(this.currentFontSize);
 
     // 3. Inicializa componentes de forma resiliente e isolada
+    // Wrapper síncrono para componentes síncronos
     const safeInit = (name, fn) => {
       try {
         fn();
@@ -37,10 +38,17 @@ class AppController {
       }
     };
 
+    // Wrapper assíncrono para componentes com async init()
+    const safeInitAsync = (name, fn) => {
+      Promise.resolve().then(() => fn()).catch(err => {
+        console.error(`[AppController] Erro ao inicializar ${name}:`, err);
+      });
+    };
+
     safeInit('ModalsComponent', () => ModalsComponent.init());
     safeInit('CardsComponent', () => CardsComponent.init());
-    safeInit('DoubtsComponent', () => DoubtsComponent.init());
-    safeInit('ChatComponent', () => ChatComponent.init());
+    safeInitAsync('DoubtsComponent', () => DoubtsComponent.init());
+    safeInitAsync('ChatComponent', () => ChatComponent.init());
     safeInit('AdminPanelComponent', () => AdminPanelComponent.init());
     safeInit('MapComponent', () => MapComponent.init());
 
@@ -374,8 +382,8 @@ class AppController {
 
     // 3. Atualiza componentes sensíveis a permissão
     CardsComponent.renderAllSections();
-    DoubtsComponent.renderMural();
-    ChatComponent.render();
+    Promise.resolve(DoubtsComponent.renderMural()).catch(err => console.error('[AppController] DoubtsComponent.renderMural error:', err));
+    Promise.resolve(ChatComponent.render()).catch(err => console.error('[AppController] ChatComponent.render error:', err));
     MapComponent.renderFloatingOverlay();
 
     if (window.lucide) window.lucide.createIcons();
@@ -393,11 +401,11 @@ class AppController {
       CardsComponent.populateCategoryFilterDropdown();
       AdminPanelComponent.renderCategoryManager();
     } else if (resource === 'doubts') {
-      DoubtsComponent.renderMural();
+      Promise.resolve(DoubtsComponent.renderMural()).catch(err => console.error('[AppController] DoubtsComponent.renderMural error:', err));
       AdminPanelComponent.renderKPIs();
       AdminPanelComponent.renderCharts();
     } else if (resource === 'chat') {
-      ChatComponent.render();
+      Promise.resolve(ChatComponent.render()).catch(err => console.error('[AppController] ChatComponent.render error:', err));
       AdminPanelComponent.renderKPIs();
     }
   }

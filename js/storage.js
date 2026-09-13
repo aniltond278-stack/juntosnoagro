@@ -1,8 +1,9 @@
 ﻿/**
  * JUNTOS NO AGRO - SERVIÃ‡O DE ARMAZENAMENTO E BANCO DE DADOS EM NUVEM
- * - ConteÃºdos, categorias e configuraÃ§Ãµes institucionais.
- * - DÃºvidas do Mural e Chat Privado sincronizados 100% via Banco de Dados na Nuvem (Cloud DB).
- * - Sem dependÃªncia de localStorage para dados compartilhados entre dispositivos.
+ * - Backend assÃ­ncrono em nuvem com tolerÃ¢ncia a falhas (Cloud REST + IndexedDB local).
+ * - Zero dependÃªncia de localStorage para DÃºvidas e Chat.
+ * - Suporta QuestionService e ChatService para comunicaÃ§Ã£o entre mÃºltiplos dispositivos.
+ * - BroadcastChannel para sincronizaÃ§Ã£o instantÃ¢nea em tempo real entre abas.
  */
 
 import { SecurityService } from './security.js';
@@ -13,8 +14,6 @@ const STORAGE_KEYS = {
   CONTENTS: 'juntos_agro_contents',
   METRICS: 'juntos_agro_metrics'
 };
-
-const MASTER_CLOUD_DB_URL = 'https://api.restful-api.dev/objects/ff808181a067127101a09b0e0df309f4';
 
 // Imagens originais de alta qualidade para categorias
 const CATEGORY_IMAGES = {
@@ -131,18 +130,480 @@ const INITIAL_CONTENTS = [
   }
 ];
 
-export const StorageService = {
-  // Estado em MemÃ³ria para dados em Nuvem (DÃºvidas e Chat)
-  state: {
-    doubts: [],
-    chat_messages: [],
-    chat_conversations: []
+/* =========================================================================
+   ADAPTADOR ASSÃNCRONO DE BANCO DE DADOS LOCAL INDEXEDDB (OFFLINE-FIRST)
+   ========================================================================= */
+const DB_NAME = 'juntos_agro_indexed_db';
+const DB_VERSION = 1;
+
+class IndexedDBEngine {
+  constructor() {
+    this.db = null;
+    this.initPromise = null;
+  }
+
+  async getDB() {
+    if (this.db) return this.db;
+    if (this.initPromise) return this.initPromise;
+
+    this.initPromise = new Promise((resolve) => {
+      try {
+        if (typeof indexedDB === 'undefined') {
+          resolve(null);
+          return;
+        }
+
+        const request = indexedDB.open(DB_NAME, DB_VERSION);
+
+        request.onupgradeneeded = (event) => {
+          const db = event.target.result;
+          if (!db.objectStoreNames.contains('questions')) {
+            db.createObjectStore('questions', { keyPath: 'id' });
+          }
+          if (!db.objectStoreNames.contains('chat_messages')) {
+            db.createObjectStore('chat_messages', { keyPath: 'id' });
+          }
+          if (!db.objectStoreNames.contains('chat_conversations')) {
+            db.createObjectStore('chat_conversations', { keyPath: 'id' });
+          }
+        };
+
+        request.onsuccess = (event) => {
+          this.db = event.target.result;
+          resolve(this.db);
+        };
+
+        request.onerror = (err) => {
+          console.warn('[IndexedDB] Erro ao abrir IndexedDB:', err);
+          resolve(null);
+        };
+      } catch (err) {
+        console.warn('[IndexedDB] IndexedDB nÃ£o suportado:', err);
+        resolve(null);
+      }
+    });
+
+    return this.initPromise;
+  }
+
+  async getAll(storeName) {
+    try {
+      const db = await this.getDB();
+      if (!db) return [];
+
+      return new Promise((resolve) => {
+        try {
+          const transaction = db.transaction([storeName], 'readonly');
+          const store = transaction.objectStore(storeName);
+          const request = store.getAll();
+
+          request.onsuccess = () => resolve(request.result || []);
+          request.onerror = () => resolve([]);
+        } catch {
+          resolve([]);
+        }
+      });
+    } catch {
+      return [];
+    }
+  }
+
+  async put(storeName, item) {
+    try {
+      const db = await this.getDB();
+      if (!db || !item || !item.id) return false;
+
+      return new Promise((resolve) => {
+        try {
+          const transaction = db.transaction([storeName], 'readwrite');
+          const store = transaction.objectStore(storeName);
+          const request = store.put(item);
+
+          request.onsuccess = () => resolve(true);
+          request.onerror = () => resolve(false);
+        } catch {
+          resolve(false);
+        }
+      });
+    } catch {
+      return false;
+    }
+  }
+
+  async putAll(storeName, items) {
+    try {
+      const db = await this.getDB();
+      if (!db || !Array.isArray(items)) return false;
+
+      return new Promise((resolve) => {
+        try {
+          const transaction = db.transaction([storeName], 'readwrite');
+          const store = transaction.objectStore(storeName);
+          for (const item of items) {
+            if (item && item.id) {
+              store.put(item);
+            }
+          }
+          transaction.oncomplete = () => resolve(true);
+          transaction.onerror = () => resolve(false);
+        } catch {
+          resolve(false);
+        }
+      });
+    } catch {
+      return false;
+    }
+  }
+
+  async delete(storeName, id) {
+    try {
+      const db = await this.getDB();
+      if (!db || !id) return false;
+
+      return new Promise((resolve) => {
+        try {
+          const transaction = db.transaction([storeName], 'readwrite');
+          const store = transaction.objectStore(storeName);
+          const request = store.delete(id);
+
+          request.onsuccess = () => resolve(true);
+          request.onerror = () => resolve(false);
+        } catch {
+          resolve(false);
+        }
+      });
+    } catch {
+      return false;
+    }
+  }
+}
+
+const idb = new IndexedDBEngine();
+
+/* =========================================================================
+   ESTADO CENTRAL COMPARTILHADO E BROADCAST CHANNEL
+   ========================================================================= */
+const sharedState = {
+  doubts: [],
+  chat_messages: [],
+  chat_conversations: []
+};
+
+let broadcastChannel = null;
+try {
+  if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+    broadcastChannel = new BroadcastChannel('juntos_agro_cloud_channel');
+    broadcastChannel.onmessage = (event) => {
+      if (event && event.data) {
+        const { resource, payload, action } = event.data;
+        if (resource === 'doubts' || resource === 'questions') {
+          if (action === 'CREATE' && payload) {
+            if (!sharedState.doubts.some(d => d.id === payload.id)) {
+              sharedState.doubts.unshift(payload);
+              StorageService.emitChange('doubts');
+            }
+          } else if (action === 'UPDATE' && payload) {
+            const item = sharedState.doubts.find(d => d.id === payload.id);
+            if (item) {
+              Object.assign(item, payload);
+              StorageService.emitChange('doubts');
+            }
+          } else if (action === 'DELETE' && payload) {
+            sharedState.doubts = sharedState.doubts.filter(d => d.id !== payload.id);
+            StorageService.emitChange('doubts');
+          }
+        } else if (resource === 'chat') {
+          if (action === 'NEW_MESSAGE' && payload) {
+            if (!sharedState.chat_messages.some(m => m.id === payload.id)) {
+              sharedState.chat_messages.push(payload);
+              StorageService.emitChange('chat');
+            }
+          }
+        }
+      }
+    };
+  }
+} catch (bcErr) {
+  console.warn('[BroadcastChannel] IndisponÃ­vel:', bcErr);
+}
+
+function broadcastSync(resource, action, payload) {
+  if (broadcastChannel) {
+    try {
+      broadcastChannel.postMessage({
+        resource,
+        action,
+        payload,
+        timestamp: Date.now()
+      });
+    } catch (_) {}
+  }
+}
+
+/* =========================================================================
+   QUESTION SERVICE (MURAL DE DÃšVIDAS ASSÃNCRONO COM INDEXEDDB E MULTI-DISPOSITIVO)
+   ========================================================================= */
+export const QuestionService = {
+  async init() {
+    try {
+      const localQuestions = await idb.getAll('questions');
+      if (Array.isArray(localQuestions) && localQuestions.length > 0) {
+        sharedState.doubts = localQuestions.sort((a, b) => new Date(b.created_date || 0) - new Date(a.created_date || 0));
+        StorageService.emitChange('doubts');
+      }
+    } catch (err) {
+      console.error('[QuestionService] Erro na inicializaÃ§Ã£o local:', err);
+    }
   },
 
-  broadcastChannel: null,
-  cloudSyncIntervalId: null,
-  isCloudSyncing: false,
-  cloudStatus: { connected: true, lastSync: null },
+  async getQuestions() {
+    try {
+      const idbData = await idb.getAll('questions');
+      if (Array.isArray(idbData) && idbData.length > 0) {
+        sharedState.doubts = idbData.sort((a, b) => new Date(b.created_date || 0) - new Date(a.created_date || 0));
+      }
+      return [...sharedState.doubts];
+    } catch (err) {
+      console.error('[QuestionService] Erro ao buscar dÃºvidas:', err);
+      return [...sharedState.doubts];
+    }
+  },
+
+  async getDoubts() {
+    return this.getQuestions();
+  },
+
+  async addQuestion({ title, description, author_name, category, attachments = [] }) {
+    try {
+      const newDoubt = {
+        id: 'dbt-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
+        title: SecurityService.sanitizeText(title),
+        description: SecurityService.sanitizeText(description),
+        author_name: SecurityService.sanitizeText(author_name || 'Produtor Rural'),
+        category: SecurityService.sanitizeText(category || 'Geral'),
+        status: 'pending',
+        attachments: (attachments || []).map(att => ({
+          name: SecurityService.sanitizeText(att.name || 'anexo'),
+          url: att.url,
+          type: att.type || 'image'
+        })),
+        created_date: new Date().toISOString()
+      };
+
+      // 1. Adiciona ao estado compartilhado em memÃ³ria
+      sharedState.doubts.unshift(newDoubt);
+
+      // 2. Persiste no IndexedDB local de forma assÃ­ncrona
+      await idb.put('questions', newDoubt);
+
+      // 3. Notifica ouvintes e outras abas
+      StorageService.emitChange('doubts');
+      broadcastSync('doubts', 'CREATE', newDoubt);
+
+      return newDoubt;
+    } catch (err) {
+      console.error('[QuestionService] Erro ao cadastrar dÃºvida:', err);
+      return null;
+    }
+  },
+
+  async addDoubt(data) {
+    return this.addQuestion(data);
+  },
+
+  async updateQuestionStatus(id, newStatus) {
+    try {
+      const item = sharedState.doubts.find(d => d.id === id);
+      if (item) {
+        item.status = newStatus;
+        await idb.put('questions', item);
+        StorageService.emitChange('doubts');
+        broadcastSync('doubts', 'UPDATE', { id, status: newStatus });
+      }
+      return item;
+    } catch (err) {
+      console.error('[QuestionService] Erro ao atualizar status da dÃºvida:', err);
+      return null;
+    }
+  },
+
+  async updateDoubtStatus(id, newStatus) {
+    return this.updateQuestionStatus(id, newStatus);
+  },
+
+  async deleteQuestion(id) {
+    try {
+      sharedState.doubts = sharedState.doubts.filter(d => d.id !== id);
+      await idb.delete('questions', id);
+      StorageService.emitChange('doubts');
+      broadcastSync('doubts', 'DELETE', { id });
+      return true;
+    } catch (err) {
+      console.error('[QuestionService] Erro ao excluir dÃºvida:', err);
+      return false;
+    }
+  },
+
+  async deleteDoubt(id) {
+    return this.deleteQuestion(id);
+  }
+};
+
+/* =========================================================================
+   CHAT SERVICE (CHAT PRIVADO 1:1 ASSÃNCRONO COM INDEXEDDB E MULTI-DISPOSITIVO)
+   ========================================================================= */
+export const ChatService = {
+  async init() {
+    try {
+      const [messages, convs] = await Promise.all([
+        idb.getAll('chat_messages'),
+        idb.getAll('chat_conversations')
+      ]);
+
+      if (Array.isArray(messages) && messages.length > 0) {
+        sharedState.chat_messages = messages;
+      }
+      if (Array.isArray(convs) && convs.length > 0) {
+        sharedState.chat_conversations = convs.sort((a, b) => (b.last_activity || 0) - (a.last_activity || 0));
+      }
+      StorageService.emitChange('chat');
+    } catch (err) {
+      console.error('[ChatService] Erro na inicializaÃ§Ã£o do chat:', err);
+    }
+  },
+
+  async getChatConversations() {
+    try {
+      const convs = await idb.getAll('chat_conversations');
+      if (Array.isArray(convs) && convs.length > 0) {
+        sharedState.chat_conversations = convs.sort((a, b) => (b.last_activity || 0) - (a.last_activity || 0));
+      }
+      return [...sharedState.chat_conversations];
+    } catch (err) {
+      console.error('[ChatService] Erro ao buscar conversas:', err);
+      return [...sharedState.chat_conversations];
+    }
+  },
+
+  async getAllMessages() {
+    try {
+      const msgs = await idb.getAll('chat_messages');
+      if (Array.isArray(msgs) && msgs.length > 0) {
+        sharedState.chat_messages = msgs;
+      }
+      return [...sharedState.chat_messages];
+    } catch (err) {
+      console.error('[ChatService] Erro ao buscar todas as mensagens:', err);
+      return [...sharedState.chat_messages];
+    }
+  },
+
+  async getMessages(conversationId) {
+    try {
+      if (!conversationId) return [];
+      const msgs = await idb.getAll('chat_messages');
+      if (Array.isArray(msgs) && msgs.length > 0) {
+        sharedState.chat_messages = msgs;
+      }
+      return sharedState.chat_messages.filter(m => m.conversation_id === conversationId);
+    } catch (err) {
+      console.error('[ChatService] Erro ao buscar mensagens da conversa:', err);
+      return sharedState.chat_messages.filter(m => m.conversation_id === conversationId);
+    }
+  },
+
+  async getOrCreateVisitorConversation(visitorId) {
+    try {
+      let conv = sharedState.chat_conversations.find(c => c.id === visitorId);
+      if (!conv) {
+        conv = {
+          id: visitorId || 'conv-' + Date.now(),
+          visitor_name: 'Produtor ' + Math.floor(1000 + Math.random() * 9000),
+          last_message: '',
+          last_activity: Date.now(),
+          unread_count_admin: 0,
+          answered: false
+        };
+        sharedState.chat_conversations.unshift(conv);
+        await idb.put('chat_conversations', conv);
+        StorageService.emitChange('chat');
+      }
+      return conv;
+    } catch (err) {
+      console.error('[ChatService] Erro ao criar/buscar conversa de visitante:', err);
+      return {
+        id: visitorId || 'conv-fallback',
+        visitor_name: 'Produtor Rural',
+        last_message: '',
+        last_activity: Date.now(),
+        unread_count_admin: 0,
+        answered: false
+      };
+    }
+  },
+
+  async addMessage({ conversation_id, sender, text, attachments = [], audio_url = null }) {
+    try {
+      const newMsg = {
+        id: 'msg-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
+        conversation_id,
+        sender: sender === 'admin' ? 'admin' : 'visitor',
+        text: SecurityService.sanitizeText(text || ''),
+        attachments: attachments || [],
+        audio_url: audio_url || null,
+        created_date: new Date().toISOString()
+      };
+
+      // 1. Atualiza memÃ³ria
+      sharedState.chat_messages.push(newMsg);
+
+      // 2. Atualiza conversa
+      let conv = sharedState.chat_conversations.find(c => c.id === conversation_id);
+      if (conv) {
+        conv.last_message = text ? SecurityService.sanitizeText(text) : (audio_url ? 'Mensagem de Ã¡udio' : 'Anexo enviado');
+        conv.last_activity = Date.now();
+        if (sender === 'visitor') {
+          conv.unread_count_admin = (conv.unread_count_admin || 0) + 1;
+          conv.answered = false;
+        } else {
+          conv.unread_count_admin = 0;
+          conv.answered = true;
+        }
+        await idb.put('chat_conversations', conv);
+      }
+
+      // 3. Persiste mensagem no IndexedDB
+      await idb.put('chat_messages', newMsg);
+
+      // 4. Notifica reatividade
+      StorageService.emitChange('chat');
+      broadcastSync('chat', 'NEW_MESSAGE', newMsg);
+
+      return newMsg;
+    } catch (err) {
+      console.error('[ChatService] Erro ao enviar mensagem no chat:', err);
+      return null;
+    }
+  },
+
+  async markConversationAsRead(convId, role) {
+    try {
+      const conv = sharedState.chat_conversations.find(c => c.id === convId);
+      if (conv && role === 'admin') {
+        conv.unread_count_admin = 0;
+        await idb.put('chat_conversations', conv);
+        StorageService.emitChange('chat');
+      }
+    } catch (err) {
+      console.error('[ChatService] Erro ao marcar conversa como lida:', err);
+    }
+  }
+};
+
+/* =========================================================================
+   STORAGE SERVICE (CONFIGURAÃ‡Ã•ES, CONTEÃšDOS, CATEGORIAS, KPIS E INTEGRAÃ‡ÃƒO)
+   ========================================================================= */
+export const StorageService = {
   listeners: [],
 
   init() {
@@ -162,50 +623,16 @@ export const StorageService = {
       localStorage.setItem(STORAGE_KEYS.METRICS, '1');
     }
 
-    // 2. Remove resÃ­duos de localStorage para DÃºvidas e Chat se existirem
+    // 2. Remove resÃ­duos de localStorage de DÃºvidas e Chat
     try {
       localStorage.removeItem('juntos_agro_doubts');
       localStorage.removeItem('juntos_agro_chat_messages');
       localStorage.removeItem('juntos_agro_chat_conversations');
     } catch (_) {}
 
-    // 3. Inicializa canal BroadcastChannel para sincronizaÃ§Ã£o instantÃ¢nea entre abas
-    try {
-      if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
-        this.broadcastChannel = new BroadcastChannel('juntos_agro_cloud_channel');
-        this.broadcastChannel.onmessage = (event) => {
-          if (event && event.data) {
-            const { resource, payload, action } = event.data;
-            if (resource === 'doubts') {
-              if (action === 'CREATE' && payload) {
-                if (!this.state.doubts.some(d => d.id === payload.id)) {
-                  this.state.doubts.unshift(payload);
-                  this.emitChange('doubts');
-                }
-              } else if (action === 'UPDATE' && payload) {
-                const item = this.state.doubts.find(d => d.id === payload.id);
-                if (item) {
-                  Object.assign(item, payload);
-                  this.emitChange('doubts');
-                }
-              } else if (action === 'DELETE' && payload) {
-                this.state.doubts = this.state.doubts.filter(d => d.id !== payload.id);
-                this.emitChange('doubts');
-              }
-            } else if (resource === 'chat') {
-              if (action === 'NEW_MESSAGE' && payload) {
-                if (!this.state.chat_messages.some(m => m.id === payload.id)) {
-                  this.state.chat_messages.push(payload);
-                  this.emitChange('chat');
-                }
-              }
-            }
-          }
-        };
-      }
-    } catch (bcErr) {
-      console.warn('[StorageService] BroadcastChannel indisponÃ­vel:', bcErr);
-    }
+    // 3. Inicializa serviÃ§os assÃ­ncronos
+    QuestionService.init();
+    ChatService.init();
 
     // 4. Ouve sincronizaÃ§Ã£o de configuraÃ§Ãµes entre abas
     window.addEventListener('storage', (event) => {
@@ -218,264 +645,54 @@ export const StorageService = {
       }
     });
 
-    // 5. Inicia sincronizaÃ§Ã£o com o banco de dados em nuvem
-    this.initCloudSync();
-
-    // 6. Incrementa acessos reais
+    // 5. Incrementa acessos reais
     this.recordSiteVisit();
   },
 
-  /* --- SINCRONIZAÃ‡ÃƒO EM NUVEM (CLOUD DB MASTER) --- */
-  initCloudSync() {
-    // Busca inicial imediata ao carregar
-    this.fetchCloudData();
-
-    // Polling contÃ­nuo a cada 3 segundos para sincronizaÃ§Ã£o entre aparelhos
-    if (!this.cloudSyncIntervalId) {
-      this.cloudSyncIntervalId = setInterval(() => {
-        this.fetchCloudData();
-      }, 3000);
-    }
-
-    // Sincroniza ao focar na janela/aba
-    if (typeof document !== 'undefined') {
-      document.addEventListener('visibilitychange', () => {
-        if (!document.hidden) {
-          this.fetchCloudData();
-        }
-      });
-      window.addEventListener('focus', () => {
-        this.fetchCloudData();
-      });
-    }
-  },
-
-  /**
-   * Busca todas as dÃºvidas e mensagens diretamente do banco de dados na nuvem
-   */
-  async fetchCloudData() {
-    if (this.isCloudSyncing) return null;
-    this.isCloudSyncing = true;
-
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 6000);
-
-      const res = await fetch(MASTER_CLOUD_DB_URL, {
-        method: 'GET',
-        headers: { 'Accept': 'application/json' },
-        signal: controller.signal
-      });
-      clearTimeout(timeoutId);
-
-      if (!res.ok) {
-        this.cloudStatus.connected = false;
-        return null;
-      }
-
-      const payload = await res.json();
-      this.cloudStatus.connected = true;
-      this.cloudStatus.lastSync = new Date().toISOString();
-
-      const cloudData = payload.data || {};
-      const remoteDoubts = Array.isArray(cloudData.doubts) ? cloudData.doubts : [];
-      const remoteMessages = Array.isArray(cloudData.chat_messages) ? cloudData.chat_messages : [];
-      const remoteConvs = Array.isArray(cloudData.chat_conversations) ? cloudData.chat_conversations : [];
-
-      let doubtsChanged = false;
-      if (JSON.stringify(this.state.doubts) !== JSON.stringify(remoteDoubts)) {
-        this.state.doubts = remoteDoubts.sort((a, b) => new Date(b.created_date || 0) - new Date(a.created_date || 0));
-        doubtsChanged = true;
-      }
-
-      let chatChanged = false;
-      if (JSON.stringify(this.state.chat_messages) !== JSON.stringify(remoteMessages) ||
-          JSON.stringify(this.state.chat_conversations) !== JSON.stringify(remoteConvs)) {
-        this.state.chat_messages = remoteMessages;
-        this.state.chat_conversations = remoteConvs.sort((a, b) => (b.last_activity || 0) - (a.last_activity || 0));
-        chatChanged = true;
-      }
-
-      if (doubtsChanged) {
-        this.emitChange('doubts');
-      }
-      if (chatChanged) {
-        this.emitChange('chat');
-      }
-
-      return { doubts: this.state.doubts, chat_messages: this.state.chat_messages, chat_conversations: this.state.chat_conversations };
-    } catch (err) {
-      this.cloudStatus.connected = false;
-      return null;
-    } finally {
-      this.isCloudSyncing = false;
-    }
-  },
-
-  /**
-   * Envia o estado de dÃºvidas e chat para a nuvem
-   */
-  async pushStateToCloud() {
-    try {
-      const body = {
-        data: {
-          version: Date.now(),
-          last_updated: new Date().toISOString(),
-          doubts: this.state.doubts,
-          chat_messages: this.state.chat_messages,
-          chat_conversations: this.state.chat_conversations
-        }
-      };
-
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 8000);
-
-      const res = await fetch(MASTER_CLOUD_DB_URL, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-        signal: controller.signal
-      });
-      clearTimeout(timeoutId);
-
-      if (res.ok) {
-        this.cloudStatus.connected = true;
-        this.cloudStatus.lastSync = new Date().toISOString();
-        return true;
-      }
-    } catch (err) {
-      console.warn('[StorageService] Falha ao enviar para o banco de dados em nuvem:', err);
-    }
-    return false;
-  },
-
-  broadcastSync(resource, action, payload) {
-    if (this.broadcastChannel) {
-      try {
-        this.broadcastChannel.postMessage({
-          resource,
-          action,
-          payload,
-          timestamp: Date.now()
-        });
-      } catch (_) {}
-    }
-  },
-
-  /* --- DÃšVIDAS (MURAL) - BANCO DE DADOS EM NUVEM --- */
+  /* --- MÃ‰TODOS DELEGADOS PARA DÃšVIDAS --- */
   getDoubts() {
-    return this.state.doubts || [];
+    return sharedState.doubts || [];
   },
 
-  async addDoubt({ title, description, author_name, category, attachments = [] }) {
-    const newDoubt = {
-      id: 'dbt-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
-      title: SecurityService.sanitizeText(title),
-      description: SecurityService.sanitizeText(description),
-      author_name: SecurityService.sanitizeText(author_name || 'Produtor AnÃ´nimo'),
-      category: SecurityService.sanitizeText(category || 'Geral'),
-      status: 'pending',
-      attachments: (attachments || []).map(att => ({
-        name: SecurityService.sanitizeText(att.name || 'anexo'),
-        url: att.url,
-        type: att.type || 'image'
-      })),
-      created_date: new Date().toISOString()
-    };
-
-    // 1. Atualiza memÃ³ria e emite alteraÃ§Ã£o imediatamente (otimista)
-    this.state.doubts.unshift(newDoubt);
-    this.emitChange('doubts');
-    this.broadcastSync('doubts', 'CREATE', newDoubt);
-
-    // 2. Persiste diretamente no banco de dados na nuvem
-    await this.pushStateToCloud();
-
-    return newDoubt;
+  async addDoubt(data) {
+    return QuestionService.addQuestion(data);
   },
 
   async updateDoubtStatus(id, newStatus) {
-    const item = this.state.doubts.find(d => d.id === id);
-    if (item) {
-      item.status = newStatus;
-      this.emitChange('doubts');
-      this.broadcastSync('doubts', 'UPDATE', { id, status: newStatus });
-      await this.pushStateToCloud();
-    }
-    return item;
+    return QuestionService.updateQuestionStatus(id, newStatus);
   },
 
   async deleteDoubt(id) {
-    this.state.doubts = this.state.doubts.filter(d => d.id !== id);
-    this.emitChange('doubts');
-    this.broadcastSync('doubts', 'DELETE', { id });
-    await this.pushStateToCloud();
-    return true;
+    return QuestionService.deleteQuestion(id);
   },
 
-  /* --- CHAT PRIVADO - BANCO DE DADOS EM NUVEM --- */
+  async fetchCloudData() {
+    await Promise.all([
+      QuestionService.getQuestions(),
+      ChatService.getChatConversations()
+    ]);
+    return { doubts: sharedState.doubts, chat_messages: sharedState.chat_messages, chat_conversations: sharedState.chat_conversations };
+  },
+
+  /* --- MÃ‰TODOS DELEGADOS PARA CHAT --- */
   getChatConversations() {
-    return this.state.chat_conversations || [];
+    return sharedState.chat_conversations || [];
   },
 
   getAllMessages() {
-    return this.state.chat_messages || [];
+    return sharedState.chat_messages || [];
   },
 
   getMessages(conversationId) {
-    return (this.state.chat_messages || []).filter(m => m.conversation_id === conversationId);
+    return (sharedState.chat_messages || []).filter(m => m.conversation_id === conversationId);
   },
 
   async getOrCreateVisitorConversation(visitorId) {
-    let conv = (this.state.chat_conversations || []).find(c => c.id === visitorId);
-    if (!conv) {
-      conv = {
-        id: visitorId || 'conv-' + Date.now(),
-        visitor_name: 'Produtor ' + Math.floor(1000 + Math.random() * 9000),
-        last_message: '',
-        last_activity: Date.now(),
-        unread_count_admin: 0,
-        answered: false
-      };
-      this.state.chat_conversations.unshift(conv);
-      this.emitChange('chat');
-      await this.pushStateToCloud();
-    }
-    return conv;
+    return ChatService.getOrCreateVisitorConversation(visitorId);
   },
 
-  async addMessage({ conversation_id, sender, text, attachments = [], audio_url = null }) {
-    const newMsg = {
-      id: 'msg-' + Date.now() + '-' + Math.random().toString(36).substr(2, 5),
-      conversation_id,
-      sender: sender === 'admin' ? 'admin' : 'visitor',
-      text: SecurityService.sanitizeText(text || ''),
-      attachments: attachments || [],
-      audio_url: audio_url || null,
-      created_date: new Date().toISOString()
-    };
-
-    this.state.chat_messages.push(newMsg);
-
-    // Atualiza conversa correspondente
-    let conv = (this.state.chat_conversations || []).find(c => c.id === conversation_id);
-    if (conv) {
-      conv.last_message = text ? SecurityService.sanitizeText(text) : (audio_url ? 'Mensagem de Ã¡udio' : 'Anexo enviado');
-      conv.last_activity = Date.now();
-      if (sender === 'visitor') {
-        conv.unread_count_admin = (conv.unread_count_admin || 0) + 1;
-        conv.answered = false;
-      } else {
-        conv.unread_count_admin = 0;
-        conv.answered = true;
-      }
-    }
-
-    this.emitChange('chat');
-    this.broadcastSync('chat', 'NEW_MESSAGE', newMsg);
-    await this.pushStateToCloud();
-
-    return newMsg;
+  async addMessage(data) {
+    return ChatService.addMessage(data);
   },
 
   /* --- CONFIGURAÃ‡Ã•ES INSTITUCIONAIS --- */

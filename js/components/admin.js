@@ -2,14 +2,16 @@
  * JUNTOS NO AGRO - PAINEL DE GESTÃO DO ADMINISTRADOR
  * Contém os 4 KPIs em tempo real no topo, botões de ação rápida (+ Categoria e + Conteúdo),
  * gráficos analíticos, gerenciador de categorias e formulário Edite-Tudo institucional.
+ * Polling automático a cada 5 segundos para sincronização de dúvidas e KPIs entre dispositivos.
  */
 
-import { StorageService } from '../storage.js';
+import { QuestionService, ChatService, StorageService } from '../storage.js';
 import { AuthService } from '../auth.js';
 import { SecurityService } from '../security.js';
 
 let chartThemesInstance = null;
 let chartDoubtsInstance = null;
+let adminPollingId = null;
 
 export const AdminPanelComponent = {
   init() {
@@ -19,6 +21,17 @@ export const AdminPanelComponent = {
     this.renderCategoryManager();
     this.renderInstitutionalSettingsForm();
     this.bindEvents();
+    this.startPolling();
+  },
+
+  startPolling() {
+    if (adminPollingId) clearInterval(adminPollingId);
+    adminPollingId = setInterval(async () => {
+      try {
+        await QuestionService.getQuestions();
+        this.renderKPIs();
+      } catch (_) {}
+    }, 5000);
   },
 
   /**
