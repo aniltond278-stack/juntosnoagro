@@ -5,7 +5,7 @@
  * prevenção contra captura indevida de rolagem mobile (Scroll Trap prevention).
  */
 
-import { StorageService } from '../storage.js';
+
 import { AuthService } from '../auth.js';
 
 let leafletMap = null;
