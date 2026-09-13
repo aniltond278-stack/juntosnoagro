@@ -28,25 +28,35 @@ class AppController {
     this.applyTheme(this.currentTheme);
     this.applyFontSize(this.currentFontSize);
 
-    // 3. Inicializa componentes
-    ModalsComponent.init();
-    MapComponent.init();
-    CardsComponent.init();
-    DoubtsComponent.init();
-    ChatComponent.init();
-    AdminPanelComponent.init();
+    // 3. Inicializa componentes de forma resiliente e isolada
+    const safeInit = (name, fn) => {
+      try {
+        fn();
+      } catch (err) {
+        console.error(`[AppController] Erro ao inicializar ${name}:`, err);
+      }
+    };
+
+    safeInit('ModalsComponent', () => ModalsComponent.init());
+    safeInit('CardsComponent', () => CardsComponent.init());
+    safeInit('DoubtsComponent', () => DoubtsComponent.init());
+    safeInit('ChatComponent', () => ChatComponent.init());
+    safeInit('AdminPanelComponent', () => AdminPanelComponent.init());
+    safeInit('MapComponent', () => MapComponent.init());
 
     // 4. Vincula eventos de navegação e interface
-    this.bindNavigation();
-    this.bindHeaderAndPreferences();
-    this.renderHeaderAndFooter();
+    safeInit('Navigation', () => this.bindNavigation());
+    safeInit('HeaderAndPreferences', () => this.bindHeaderAndPreferences());
+    safeInit('HeaderAndFooter', () => this.renderHeaderAndFooter());
 
     // 5. Ouve mudanças de autenticação e de dados (Reatividade Completa)
     AuthService.onAuthStateChanged(() => this.handleAuthChange());
     StorageService.subscribe((resource) => this.handleDataChange(resource));
 
     // Lucide Icons
-    if (window.lucide) window.lucide.createIcons();
+    try {
+      if (window.lucide) window.lucide.createIcons();
+    } catch (_) {}
   }
 
   /* =========================================================================

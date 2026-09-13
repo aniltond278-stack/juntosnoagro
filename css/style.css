@@ -208,9 +208,26 @@ body {
 }
 
 /* Leaflet Container customization */
+#agro-map-container {
+  height: 480px !important;
+  min-height: 400px !important;
+  width: 100% !important;
+  position: relative !important;
+  z-index: 1 !important;
+}
+
+@media (max-width: 768px) {
+  #agro-map-container {
+    height: 440px !important;
+    min-height: 380px !important;
+  }
+}
+
 .leaflet-container {
   font-family: inherit !important;
   background: #eef2ea !important;
+  height: 100% !important;
+  width: 100% !important;
 }
 [data-theme="dark"] .leaflet-container {
   background: #111a13 !important;

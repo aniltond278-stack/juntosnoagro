@@ -18,51 +18,97 @@ export const MapComponent = {
 
   init(containerId = 'agro-map-container') {
     const container = document.getElementById(containerId);
-    if (!container) return;
-
-    const settings = StorageService.getSettings();
-    const sede = settings.sede || { name: 'Sede — Instrutor Principal', coords: [-14.235, -51.9253] };
-    const points = settings.mapPoints || [];
-
-    if (leafletMap) {
-      leafletMap.remove();
-      leafletMap = null;
+    if (!container) {
+      console.warn(`[MapComponent] Contêiner #${containerId} não encontrado no DOM.`);
+      return;
     }
 
-    // Inicializa o mapa centralizado no Brasil
-    leafletMap = L.map(containerId, {
-      center: sede.coords,
-      zoom: 4,
-      zoomControl: false,
-      scrollWheelZoom: false,
-      attributionControl: false
-    });
+    // Garante que a renderização do card flutuante sempre ocorra, mesmo se o Leaflet falhar
+    try {
+      this.renderFloatingOverlay();
+    } catch (overlayErr) {
+      console.error('[MapComponent] Falha ao renderizar overlay flutuante:', overlayErr);
+    }
 
-    // Camada de Tiles limpa OpenStreetMap
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 18
-    }).addTo(leafletMap);
+    // Verificação de disponibilidade da biblioteca global Leaflet (L)
+    if (typeof window.L === 'undefined' || !window.L || !window.L.map) {
+      console.warn('[MapComponent] Biblioteca Leaflet (L) não carregada ou bloqueada. Ativando fallback estático.');
+      this.renderFallbackMap(container);
+      return;
+    }
 
-    // Camadas de marcadores e linhas
-    markersLayer = L.layerGroup().addTo(leafletMap);
-    linesLayer = L.layerGroup().addTo(leafletMap);
+    try {
+      // Garante dimensões computadas no contêiner antes de montar o Leaflet
+      container.style.height = '100%';
+      container.style.minHeight = '400px';
 
-    this.renderMarkersAndLines(sede, points);
+      const settings = StorageService.getSettings();
+      const sede = settings.sede || { name: 'Sede — Instrutor Principal', coords: [-14.235, -51.9253] };
+      const points = settings.mapPoints || [];
 
-    // Solicita geolocalização nativa do usuário (GPS)
-    this.requestUserGeolocation();
+      if (leafletMap) {
+        try {
+          leafletMap.remove();
+        } catch (removeErr) {
+          console.warn('[MapComponent] Aviso ao remover instância anterior do mapa:', removeErr);
+        }
+        leafletMap = null;
+      }
 
-    // Ajusta redimensionamento
-    setTimeout(() => {
-      if (leafletMap) leafletMap.invalidateSize();
-    }, 200);
+      // Inicializa o mapa centralizado no Brasil
+      leafletMap = window.L.map(containerId, {
+        center: sede.coords,
+        zoom: 4,
+        zoomControl: false,
+        scrollWheelZoom: false,
+        attributionControl: false
+      });
 
-    window.addEventListener('resize', () => {
-      if (leafletMap) leafletMap.invalidateSize();
-    });
+      // Camada de Tiles limpa OpenStreetMap
+      window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 18
+      }).addTo(leafletMap);
 
-    // Renderiza o card flutuante de métricas (Overlay)
-    this.renderFloatingOverlay();
+      // Camadas de marcadores e linhas
+      markersLayer = window.L.layerGroup().addTo(leafletMap);
+      linesLayer = window.L.layerGroup().addTo(leafletMap);
+
+      this.renderMarkersAndLines(sede, points);
+
+      // Solicita geolocalização nativa do usuário (GPS) de forma assíncrona e segura
+      this.requestUserGeolocation();
+
+      // Ajusta redimensionamento defensivo após montagem no DOM
+      setTimeout(() => {
+        if (leafletMap) {
+          try { leafletMap.invalidateSize(); } catch (_) {}
+        }
+      }, 300);
+
+      window.addEventListener('resize', () => {
+        if (leafletMap) {
+          try { leafletMap.invalidateSize(); } catch (_) {}
+        }
+      });
+    } catch (err) {
+      console.error('[MapComponent] Erro capturado e isolado ao montar o Leaflet Map:', err);
+      this.renderFallbackMap(container);
+    }
+  },
+
+  renderFallbackMap(container) {
+    if (!container) return;
+    container.innerHTML = `
+      <div class="w-full h-full min-h-[400px] flex flex-col items-center justify-center bg-emerald-950 text-white p-6 text-center select-none">
+        <span class="text-4xl mb-3">🌾</span>
+        <h4 class="text-lg font-bold text-emerald-300">Rede Nacional Juntos no Agro</h4>
+        <p class="text-xs text-emerald-100/80 max-w-md mt-1">Conectando produtores, especialistas e pesquisadores em todo o território brasileiro.</p>
+        <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-800/80 text-[11px] font-semibold text-emerald-200 mt-4 border border-emerald-700">
+          <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+          Rede Conectada ao Vivo
+        </span>
+      </div>
+    `;
   },
 
   /**
