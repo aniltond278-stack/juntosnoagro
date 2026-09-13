@@ -9,7 +9,7 @@ const HEADERS = {
   'Prefer': 'return=representation'
 };
 
-const StorageService = {
+export const StorageService = {
   async getQuestions() {
     try {
       const res = await fetch(`${SUPABASE_URL}/duvidas?select=*&order=created_at.desc`, { headers: HEADERS });
@@ -80,7 +80,11 @@ const StorageService = {
   }
 };
 
-// Disponibiliza o servico globalmente para o navegador
-window.StorageService = StorageService;
-window.QuestionService = StorageService;
-window.ChatService = StorageService;
+export const QuestionService = StorageService;
+export const ChatService = StorageService;
+
+if (typeof window !== 'undefined') {
+  window.StorageService = StorageService;
+  window.QuestionService = StorageService;
+  window.ChatService = StorageService;
+}
