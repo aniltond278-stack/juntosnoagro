@@ -62,6 +62,13 @@ export const MapComponent = {
 
       // Permite rolagem vertical nativa da página sem prender o dedo quando travado
       container.style.touchAction = isMobile ? 'pan-y' : 'auto';
+      if (isMobile) {
+        container.style.pointerEvents = 'none';
+        container.classList.add('pointer-events-none');
+      } else {
+        container.style.pointerEvents = 'auto';
+        container.classList.remove('pointer-events-none');
+      }
 
       // Inicializa o mapa com coordenadas padrão centralizadas no Brasil (zoom 4)
       leafletMap = window.L.map(containerId, {
@@ -71,6 +78,9 @@ export const MapComponent = {
         scrollWheelZoom: false, // Desativado para não capturar a rolagem do mouse
         dragging: !isMobile,     // Desativado por padrão no mobile
         touchZoom: !isMobile,    // Desativado por padrão no mobile
+        doubleClickZoom: !isMobile,
+        boxZoom: !isMobile,
+        keyboard: !isMobile,
         tap: !isMobile,          // Desativado por padrão no mobile
         attributionControl: false
       });
@@ -119,6 +129,39 @@ export const MapComponent = {
     const container = document.getElementById('agro-map-container');
     if (!toggleBtn) return;
 
+    // Aplica o estado de bloqueio e manipuladores de toque no mapa
+    const applyLockState = () => {
+      if (!leafletMap) return;
+
+      if (this.isInteracting) {
+        if (leafletMap.dragging) leafletMap.dragging.enable();
+        if (leafletMap.touchZoom) leafletMap.touchZoom.enable();
+        if (leafletMap.doubleClickZoom) leafletMap.doubleClickZoom.enable();
+        if (leafletMap.scrollWheelZoom) leafletMap.scrollWheelZoom.enable();
+        if (leafletMap.tap) leafletMap.tap.enable();
+        if (leafletMap.boxZoom) leafletMap.boxZoom.enable();
+        if (leafletMap.keyboard) leafletMap.keyboard.enable();
+        if (container) {
+          container.style.touchAction = 'none';
+          container.style.pointerEvents = 'auto';
+          container.classList.remove('pointer-events-none');
+        }
+      } else {
+        if (leafletMap.dragging) leafletMap.dragging.disable();
+        if (leafletMap.touchZoom) leafletMap.touchZoom.disable();
+        if (leafletMap.doubleClickZoom) leafletMap.doubleClickZoom.disable();
+        if (leafletMap.scrollWheelZoom) leafletMap.scrollWheelZoom.disable();
+        if (leafletMap.tap) leafletMap.tap.disable();
+        if (leafletMap.boxZoom) leafletMap.boxZoom.disable();
+        if (leafletMap.keyboard) leafletMap.keyboard.disable();
+        if (container) {
+          container.style.touchAction = 'pan-y';
+          container.style.pointerEvents = 'none';
+          container.classList.add('pointer-events-none');
+        }
+      }
+    };
+
     // Atualiza o visual do botão
     const updateButtonUI = (btn) => {
       const iconEl = btn.querySelector('#map-interaction-icon');
@@ -127,14 +170,14 @@ export const MapComponent = {
       if (this.isInteracting) {
         if (iconEl) iconEl.textContent = '🔒';
         if (textEl) textEl.textContent = 'Travar Mapa';
-        btn.className = 'flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary text-white border border-primary shadow-lg text-xs font-bold transition select-none';
-        if (container) container.style.touchAction = 'none';
+        btn.className = 'flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary text-white border border-primary shadow-lg text-xs font-bold transition select-none pointer-events-auto';
       } else {
         if (iconEl) iconEl.textContent = '🔓';
         if (textEl) textEl.textContent = 'Interagir com o Mapa';
-        btn.className = 'flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-card/95 dark:bg-card/95 backdrop-blur-md border border-border text-foreground shadow-lg text-xs font-semibold hover:bg-card transition select-none';
-        if (container) container.style.touchAction = 'pan-y';
+        btn.className = 'flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-card/95 dark:bg-card/95 backdrop-blur-md border border-border text-foreground shadow-lg text-xs font-semibold hover:bg-card transition select-none pointer-events-auto';
       }
+
+      applyLockState();
     };
 
     updateButtonUI(toggleBtn);
@@ -146,20 +189,7 @@ export const MapComponent = {
     newBtn.addEventListener('click', (e) => {
       e.preventDefault();
       e.stopPropagation();
-      if (!leafletMap) return;
-
       this.isInteracting = !this.isInteracting;
-
-      if (this.isInteracting) {
-        leafletMap.dragging.enable();
-        if (leafletMap.touchZoom) leafletMap.touchZoom.enable();
-        if (leafletMap.tap) leafletMap.tap.enable();
-      } else {
-        leafletMap.dragging.disable();
-        if (leafletMap.touchZoom) leafletMap.touchZoom.disable();
-        if (leafletMap.tap) leafletMap.tap.disable();
-      }
-
       updateButtonUI(newBtn);
     });
   },

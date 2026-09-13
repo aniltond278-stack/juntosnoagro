@@ -300,15 +300,27 @@
     <section id="tab-content-duvidas" class="hidden space-y-6 animate-in-fade">
       <div class="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h2 class="text-2xl font-black text-foreground tracking-tight">Mural de Dúvidas</h2>
-          <p class="text-xs md:text-sm text-muted-foreground mt-0.5">Espaço aberto de suporte agronômico. Envie sua pergunta e acompanhe a resolução.</p>
+          <div class="flex items-center gap-2">
+            <h2 class="text-2xl font-black text-foreground tracking-tight">Mural de Dúvidas</h2>
+            <span id="cloud-sync-status-badge" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-600 border border-emerald-500/20">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+              Nuvem Ativa
+            </span>
+          </div>
+          <p class="text-xs md:text-sm text-muted-foreground mt-0.5">Espaço aberto de suporte agronômico. Perguntas sincronizadas em tempo real entre todos os dispositivos.</p>
         </div>
 
-        <!-- Botão + Nova Dúvida (Acessível a todos os visitantes e produtores) -->
-        <button id="btn-open-new-doubt" class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold bg-primary text-white hover:bg-primary-hover shadow-md shadow-primary/20 transition">
-          <i data-lucide="plus-circle" class="w-4 h-4"></i>
-          <span>+ Nova Dúvida</span>
-        </button>
+        <div class="flex items-center gap-2.5">
+          <button id="btn-sync-doubts-cloud" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-card border border-border text-foreground hover:bg-muted active:scale-95 transition" title="Sincronizar com a nuvem agora">
+            <i data-lucide="refresh-cw" class="w-3.5 h-3.5 text-primary"></i>
+            <span class="hidden sm:inline">Sincronizar</span>
+          </button>
+          <!-- Botão + Nova Dúvida (Acessível a todos os visitantes e produtores) -->
+          <button id="btn-open-new-doubt" class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold bg-primary text-white hover:bg-primary-hover shadow-md shadow-primary/20 transition">
+            <i data-lucide="plus-circle" class="w-4 h-4"></i>
+            <span>+ Nova Dúvida</span>
+          </button>
+        </div>
       </div>
 
       <!-- Quadro Kanban das Dúvidas -->

@@ -38,6 +38,7 @@ const INITIAL_SETTINGS = {
     name: 'Sede — Instrutor Principal',
     coords: [-14.235, -51.9253] // Centro geográfico do Brasil
   },
+  cloudDbEndpoint: 'https://juntosnoagro-db-default-rtdb.firebaseio.com',
   mapPoints: []
 };
 
@@ -182,7 +183,48 @@ export const StorageService = {
       localStorage.setItem(STORAGE_KEYS.CHAT_MESSAGES, JSON.stringify([]));
     }
 
-    // Ouve sincronização entre abas/janelas em tempo real
+    // Inicializa canal BroadcastChannel para sincronização instantânea entre abas e janelas
+    try {
+      if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+        this.broadcastChannel = new BroadcastChannel('juntos_agro_sync_channel');
+        this.broadcastChannel.onmessage = (event) => {
+          if (event && event.data) {
+            const { resource, payload, action } = event.data;
+            if (resource === 'doubts') {
+              if (action === 'CREATE' && payload) {
+                const localDoubts = this.getDoubts();
+                if (!localDoubts.some(d => d.id === payload.id)) {
+                  localDoubts.unshift(payload);
+                  localStorage.setItem(STORAGE_KEYS.DOUBTS, JSON.stringify(localDoubts));
+                  this.emitChange('doubts');
+                }
+              } else if (action === 'UPDATE' && payload) {
+                const localDoubts = this.getDoubts();
+                const item = localDoubts.find(d => d.id === payload.id);
+                if (item) {
+                  Object.assign(item, payload);
+                  localStorage.setItem(STORAGE_KEYS.DOUBTS, JSON.stringify(localDoubts));
+                  this.emitChange('doubts');
+                }
+              } else if (action === 'DELETE' && payload) {
+                let localDoubts = this.getDoubts();
+                localDoubts = localDoubts.filter(d => d.id !== payload.id);
+                localStorage.setItem(STORAGE_KEYS.DOUBTS, JSON.stringify(localDoubts));
+                this.emitChange('doubts');
+              } else {
+                this.emitChange('doubts');
+              }
+            } else if (resource) {
+              this.emitChange(resource);
+            }
+          }
+        };
+      }
+    } catch (bcErr) {
+      console.warn('[StorageService] BroadcastChannel indisponível:', bcErr);
+    }
+
+    // Ouve sincronização entre abas/janelas via evento nativo de storage
     window.addEventListener('storage', (event) => {
       if (event.key === STORAGE_KEYS.DOUBTS) {
         this.emitChange('doubts');
@@ -197,8 +239,129 @@ export const StorageService = {
       }
     });
 
+    // Inicia sincronização com banco de dados em nuvem
+    this.initCloudSync();
+
     // Incrementa contagem de acessos real do site
     this.recordSiteVisit();
+  },
+
+  /* --- BANCO DE DADOS EM NUVEM (CLOUD SYNC) --- */
+  broadcastChannel: null,
+  cloudSyncIntervalId: null,
+  isCloudSyncing: false,
+  cloudStatus: { connected: false, lastSync: null },
+
+  getCloudEndpoint() {
+    const settings = this.getSettings();
+    return (settings.cloudDbEndpoint || 'https://juntosnoagro-db-default-rtdb.firebaseio.com').trim().replace(/\/+$/, '');
+  },
+
+  initCloudSync() {
+    // 1. Busca inicial imediata ao carregar a página
+    this.fetchDoubtsFromCloud();
+
+    // 2. Polling contínuo em segundo plano a cada 8 segundos (sincronização multi-dispositivo)
+    if (!this.cloudSyncIntervalId) {
+      this.cloudSyncIntervalId = setInterval(() => {
+        this.fetchDoubtsFromCloud();
+      }, 8000);
+    }
+
+    // 3. Sincroniza imediatamente quando a janela/aba volta a ficar ativa
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) {
+          this.fetchDoubtsFromCloud();
+        }
+      });
+      window.addEventListener('focus', () => {
+        this.fetchDoubtsFromCloud();
+      });
+    }
+  },
+
+  async fetchDoubtsFromCloud() {
+    if (this.isCloudSyncing) return null;
+    this.isCloudSyncing = true;
+
+    try {
+      const endpoint = this.getCloudEndpoint();
+      const url = `${endpoint}/doubts.json`;
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 6000);
+
+      const res = await fetch(url, {
+        method: 'GET',
+        headers: { 'Accept': 'application/json' },
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+
+      if (!res.ok) {
+        this.cloudStatus.connected = false;
+        return null;
+      }
+
+      const remoteData = await res.json();
+      this.cloudStatus.connected = true;
+      this.cloudStatus.lastSync = new Date().toISOString();
+
+      if (!remoteData) return [];
+
+      let remoteDoubts = [];
+      if (Array.isArray(remoteData)) {
+        remoteDoubts = remoteData.filter(Boolean);
+      } else if (typeof remoteData === 'object') {
+        remoteDoubts = Object.keys(remoteData).map(k => ({
+          ...remoteData[k],
+          id: remoteData[k].id || k
+        }));
+      }
+
+      // Mescla com dúvidas locais (preserva dúvidas locais recentes e adiciona as da nuvem)
+      const localDoubts = this.getDoubts();
+      const localMap = new Map(localDoubts.map(d => [d.id, d]));
+      let hasChanges = false;
+
+      remoteDoubts.forEach(rd => {
+        if (!rd || !rd.id) return;
+        const local = localMap.get(rd.id);
+        if (!local || JSON.stringify(local) !== JSON.stringify(rd)) {
+          localMap.set(rd.id, rd);
+          hasChanges = true;
+        }
+      });
+
+      if (hasChanges) {
+        const merged = Array.from(localMap.values()).sort((a, b) => {
+          return new Date(b.created_date || 0) - new Date(a.created_date || 0);
+        });
+        localStorage.setItem(STORAGE_KEYS.DOUBTS, JSON.stringify(merged));
+        this.emitChange('doubts');
+      }
+
+      return remoteDoubts;
+    } catch (err) {
+      this.cloudStatus.connected = false;
+      return null;
+    } finally {
+      this.isCloudSyncing = false;
+    }
+  },
+
+  broadcastSync(resource, action, payload) {
+    if (this.broadcastChannel) {
+      try {
+        this.broadcastChannel.postMessage({
+          resource,
+          action,
+          payload,
+          timestamp: Date.now()
+        });
+      } catch (_) {}
+    }
   },
 
   /* --- SETTINGS --- */
@@ -348,7 +511,7 @@ export const StorageService = {
     return true;
   },
 
-  /* --- DOUBTS (MURAL) --- */
+  /* --- DOUBTS (MURAL) COM PERSISTÊNCIA EM NUVEM --- */
   getDoubts() {
     try {
       const data = localStorage.getItem(STORAGE_KEYS.DOUBTS);
@@ -361,22 +524,31 @@ export const StorageService = {
   addDoubt({ title, description, author_name, category, attachments = [] }) {
     const doubts = this.getDoubts();
     const newDoubt = {
-      id: 'dbt-' + Date.now(),
+      id: 'dbt-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
       title: SecurityService.sanitizeText(title),
       description: SecurityService.sanitizeText(description),
       author_name: SecurityService.sanitizeText(author_name || 'Produtor Anônimo'),
       category: SecurityService.sanitizeText(category || 'Geral'),
       status: 'pending',
-      attachments: attachments.map(att => ({
+      attachments: (attachments || []).map(att => ({
         name: SecurityService.sanitizeText(att.name || 'anexo'),
         url: att.url,
         type: att.type || 'image'
       })),
       created_date: new Date().toISOString()
     };
+
+    // 1. Gravação local com emissão imediata para interface reativa
     doubts.unshift(newDoubt);
     localStorage.setItem(STORAGE_KEYS.DOUBTS, JSON.stringify(doubts));
     this.emitChange('doubts');
+
+    // 2. Transmissão imediata via BroadcastChannel para outras abas abertas
+    this.broadcastSync('doubts', 'CREATE', newDoubt);
+
+    // 3. Persistência remota em nuvem (assíncrona e resiliente)
+    this.saveDoubtToCloud(newDoubt);
+
     return newDoubt;
   },
 
@@ -387,6 +559,8 @@ export const StorageService = {
       item.status = newStatus;
       localStorage.setItem(STORAGE_KEYS.DOUBTS, JSON.stringify(doubts));
       this.emitChange('doubts');
+      this.broadcastSync('doubts', 'UPDATE', { id, status: newStatus });
+      this.updateDoubtInCloud(id, { status: newStatus });
     }
     return item;
   },
@@ -396,7 +570,88 @@ export const StorageService = {
     doubts = doubts.filter(d => d.id !== id);
     localStorage.setItem(STORAGE_KEYS.DOUBTS, JSON.stringify(doubts));
     this.emitChange('doubts');
+    this.broadcastSync('doubts', 'DELETE', { id });
+    this.deleteDoubtFromCloud(id);
     return true;
+  },
+
+  /**
+   * Envia uma nova dúvida para a nuvem
+   */
+  async saveDoubtToCloud(doubt) {
+    try {
+      const endpoint = this.getCloudEndpoint();
+      const url = `${endpoint}/doubts/${encodeURIComponent(doubt.id)}.json`;
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
+
+      const res = await fetch(url, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(doubt),
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+
+      if (res.ok) {
+        this.cloudStatus.connected = true;
+        this.cloudStatus.lastSync = new Date().toISOString();
+        return true;
+      }
+    } catch (err) {
+      // Resiliente: a dúvida permanece no cache local
+      console.warn('[StorageService] Nuvem temporariamente inacessível. Dúvida mantida localmente:', err);
+    }
+    return false;
+  },
+
+  /**
+   * Atualiza o status de uma dúvida na nuvem
+   */
+  async updateDoubtInCloud(id, updates) {
+    try {
+      const endpoint = this.getCloudEndpoint();
+      const url = `${endpoint}/doubts/${encodeURIComponent(id)}.json`;
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
+
+      const res = await fetch(url, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates),
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+      return res.ok;
+    } catch (err) {
+      console.warn('[StorageService] Erro ao sincronizar atualização na nuvem:', err);
+      return false;
+    }
+  },
+
+  /**
+   * Remove uma dúvida da nuvem
+   */
+  async deleteDoubtFromCloud(id) {
+    try {
+      const endpoint = this.getCloudEndpoint();
+      const url = `${endpoint}/doubts/${encodeURIComponent(id)}.json`;
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
+
+      const res = await fetch(url, {
+        method: 'DELETE',
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+      return res.ok;
+    } catch (err) {
+      console.warn('[StorageService] Erro ao remover dúvida da nuvem:', err);
+      return false;
+    }
   },
 
   /* --- CHAT PRIVADO --- */

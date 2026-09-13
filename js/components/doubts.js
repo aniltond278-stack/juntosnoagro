@@ -15,6 +15,39 @@ export const DoubtsComponent = {
   init() {
     this.renderMural();
     this.bindNewDoubtModalEvents();
+    this.bindSyncButton();
+  },
+
+  bindSyncButton() {
+    const syncBtn = document.getElementById('btn-sync-doubts-cloud');
+    if (!syncBtn) return;
+
+    syncBtn.addEventListener('click', async () => {
+      syncBtn.disabled = true;
+      syncBtn.classList.add('opacity-60');
+      const badge = document.getElementById('cloud-sync-status-badge');
+      if (badge) {
+        badge.innerHTML = `
+          <span class="w-1.5 h-1.5 rounded-full bg-blue-500 animate-spin"></span>
+          Sincronizando...
+        `;
+        badge.className = 'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-500/10 text-blue-600 border border-blue-500/20';
+      }
+
+      await StorageService.fetchDoubtsFromCloud();
+
+      setTimeout(() => {
+        syncBtn.disabled = false;
+        syncBtn.classList.remove('opacity-60');
+        if (badge) {
+          badge.innerHTML = `
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+            Nuvem Ativa
+          `;
+          badge.className = 'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-600 border border-emerald-500/20';
+        }
+      }, 500);
+    });
   },
 
   renderMural() {
